@@ -1,0 +1,122 @@
+name: Shared Plugin Release
+
+on:
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - "rabbitmq/**"
+      - "servicebus/**"
+      - ".github/workflows/release.yml"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Release tag to create or update (for example v1.2.3)
+        required: true
+        type: string
+      release_name:
+        description: Optional release title
+        required: false
+        type: string
+        default: Plugins release
+
+jobs:
+  build:
+    name: Build ${{ matrix.plugin }}
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - plugin: rabbitmq
+            directory: rabbitmq
+            artifact_path: rabbitmq/build/RabbitmqPlugin
+            install_packages: build-essential cmake git
+            configure_args: ""
+          - plugin: servicebus
+            directory: servicebus
+            artifact_path: servicebus/build/ServiceBusPlugin
+            install_packages: build-essential cmake git ninja-build pkg-config
+            configure_args: >-
+              -DCMAKE_TOOLCHAIN_FILE=${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ matrix.install_packages }}
+
+      - name: Configure CMake (${{ matrix.plugin }})
+        working-directory: ${{ matrix.directory }}
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release ${{ matrix.configure_args }}
+
+      - name: Build (${{ matrix.plugin }})
+        working-directory: ${{ matrix.directory }}
+        run: |
+          cmake --build build --config Release
+
+      - name: Package (${{ matrix.plugin }})
+        run: |
+          mkdir -p release-payloads
+          tar -czf "release-payloads/${{ matrix.plugin }}-linux-x86_64.tar.gz" -C "${{ matrix.artifact_path }}" .
+
+      - name: Upload artifact (${{ matrix.plugin }})
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.plugin }}-linux-x86_64
+          path: release-payloads/${{ matrix.plugin }}-linux-x86_64.tar.gz
+          if-no-files-found: error
+          retention-days: 30
+
+  approve_release:
+    name: Await manual approval
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: release
+    steps:
+      - run: echo "Waiting for manual approval before publishing the release."
+
+  release:
+    name: Publish combined release
+    needs: approve_release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Resolve release metadata
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "RELEASE_TAG=${{ github.event.inputs.release_tag }}" >> "$GITHUB_ENV"
+            echo "RELEASE_NAME=${{ github.event.inputs.release_name }}" >> "$GITHUB_ENV"
+          else
+            echo "RELEASE_TAG=pr-${{ github.event.pull_request.number }}" >> "$GITHUB_ENV"
+            echo "RELEASE_NAME=PR ${{ github.event.pull_request.number }} build" >> "$GITHUB_ENV"
+          fi
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release files
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-files
+          find artifacts -type f -name '*.tar.gz' -exec cp {} release-files/ \;
+          ls -la release-files/
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ env.RELEASE_NAME }}
+          files: release-files/*
+          draft: false
+          prerelease: false
+          generate_release_notes: true
