@@ -2,11 +2,11 @@
 #include "IServer.h"
 #include <string>
 
-namespace Graftcode::Plugins::Rabbitmq {
-	class RabbitMqServer : public GraftcodeGateway::IServer {
+namespace Graftcode::Plugins::ServiceBus {
+	class ServiceBusServer : public GraftcodeGateway::IServer {
 	public:
-		RabbitMqServer() = default;
-		~RabbitMqServer() override = default;
+		ServiceBusServer() = default;
+		~ServiceBusServer() override = default;
 		void configure(const char* jsonConfig, ProcessMessageFn processMessage) override;
 		void start() override;
 		void stop() override;
