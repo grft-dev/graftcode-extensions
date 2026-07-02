@@ -1,5 +1,5 @@
 #pragma once
-#include <string>
+#include <cstddef>
 
 namespace GraftcodeGateway {
 	class IServer {
@@ -9,7 +9,7 @@ namespace GraftcodeGateway {
 		using ProcessMessageFn = bool(*)(const byte* requestData, std::size_t requestSize, WriteResponseFn writeResponse, void* writeContext);
 
 		virtual ~IServer() = default;
-		virtual void configure(const std::string& jsonConfig, ProcessMessageFn processMessage) = 0;
+		virtual void configure(const char* jsonConfig, ProcessMessageFn processMessage) = 0;
 		virtual void start() = 0;
 		virtual void stop() = 0;
 	};

@@ -233,10 +233,24 @@ namespace {
 	// routes the reply into that session, which is what the client waits on.
 	std::optional<std::string> tryGetReplySessionId(const AmqpModels::AmqpMessage& message) {
 		const auto& replyToGroupId = message.Properties.ReplyToGroupId;
-		if (!replyToGroupId.HasValue() || replyToGroupId.Value().empty()) {
-			return std::nullopt;
+		if (replyToGroupId.HasValue() && !replyToGroupId.Value().empty()) {
+			return replyToGroupId.Value();
 		}
-		return replyToGroupId.Value();
+
+		constexpr const char* replySessionAppProperty = "ReplyToSessionId";
+		const auto appPropertyIt = message.ApplicationProperties.find(replySessionAppProperty);
+		if (appPropertyIt != message.ApplicationProperties.end()) {
+			try {
+				const std::string value = static_cast<std::string>(appPropertyIt->second);
+				if (!value.empty()) {
+					return value;
+				}
+			}
+			catch (...) {
+			}
+		}
+
+		return std::nullopt;
 	}
 
 	// Lazily-created, cached senders keyed by reply entity so each reply target reuses a link.
@@ -316,12 +330,12 @@ namespace {
 }
 
 void ServiceBusServer::configure(
-	const std::string& jsonConfig,
+	const char* jsonConfig,
 	ProcessMessageFn processMessage) {
 	if (processMessage == nullptr) {
 		throw std::runtime_error("Service Bus consumer: processMessage callback is required");
 	}
-	applyConfigFromJson(jsonConfig);
+	applyConfigFromJson(jsonConfig != nullptr ? jsonConfig : "");
 	setProcessMessage(processMessage);
 }
 

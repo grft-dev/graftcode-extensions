@@ -172,7 +172,7 @@ TEST(ServiceBusLive, RpcRoundTrip) {
 		+ "\",\"replyQueue\":\"" + jsonEscape(replyQueue) + "\"}";
 
 	auto server = std::make_unique<ServiceBusServer>();
-	server->configure(serverConfig, &EchoCallback);
+	server->configure(serverConfig.c_str(), &EchoCallback);
 	std::thread serverThread([&server]() { server->start(); });
 	std::this_thread::sleep_for(std::chrono::seconds(3));
 
@@ -217,7 +217,7 @@ TEST(ServiceBusLive, OneWayTopicRoundTrip) {
 		+ "\",\"subscription\":\"" + jsonEscape(subscription) + "\"}";
 
 	auto server = std::make_unique<ServiceBusServer>();
-	server->configure(serverConfig, &RecordOneWayCallback);
+	server->configure(serverConfig.c_str(), &RecordOneWayCallback);
 	std::thread serverThread([&server]() { server->start(); });
 	std::this_thread::sleep_for(std::chrono::seconds(3));
 

@@ -420,12 +420,12 @@ namespace {
 }
 
 void RabbitMqServer::configure(
-	const std::string& jsonConfig,
+	const char* jsonConfig,
 	ProcessMessageFn processMessage) {
 	if (processMessage == nullptr) {
 		throw std::runtime_error("RabbitMQ consumer: processMessage callback is required");
 	}
-	applyConfigFromJson(jsonConfig);
+	applyConfigFromJson(jsonConfig != nullptr ? jsonConfig : "");
 	setProcessMessage(processMessage);
 }
 
