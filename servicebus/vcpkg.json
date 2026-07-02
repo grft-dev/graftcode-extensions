@@ -5,6 +5,5 @@
   "dependencies": [
     "azure-core-amqp-cpp",
     "nlohmann-json"
-  ],
-  "builtin-baseline": "1f5e0348089e8a9b187f57d42866ebc871e815da"
+  ]
 }
