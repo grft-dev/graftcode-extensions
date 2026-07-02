@@ -27,8 +27,8 @@ on:
 
 jobs:
   build:
-    name: Build ${{ matrix.plugin }}
-    runs-on: ubuntu-22.04
+    name: Build ${{ matrix.plugin }} (${{ matrix.platform }} ${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -36,22 +36,110 @@ jobs:
           - plugin: rabbitmq
             directory: rabbitmq
             artifact_path: rabbitmq/build/RabbitmqPlugin
+            os: windows-latest
+            platform: Windows
+            arch: x86_64
+            compiler: msvc
             install_packages: build-essential cmake git
             configure_args: ""
+            package_suffix: windows-x86_64
+          - plugin: rabbitmq
+            directory: rabbitmq
+            artifact_path: rabbitmq/build/RabbitmqPlugin
+            os: windows-11-arm
+            platform: Windows
+            arch: arm64
+            compiler: msvc
+            install_packages: build-essential cmake git
+            configure_args: ""
+            package_suffix: windows-arm64
+          - plugin: rabbitmq
+            directory: rabbitmq
+            artifact_path: rabbitmq/build/RabbitmqPlugin
+            os: ubuntu-22.04
+            platform: Linux
+            arch: x86_64
+            compiler: gcc
+            install_packages: build-essential cmake git
+            configure_args: ""
+            package_suffix: linux-x86_64
+          - plugin: rabbitmq
+            directory: rabbitmq
+            artifact_path: rabbitmq/build/RabbitmqPlugin
+            os: ubuntu-22.04-arm
+            platform: Linux
+            arch: arm64
+            compiler: gcc
+            install_packages: build-essential cmake git
+            configure_args: ""
+            package_suffix: linux-arm64
+          - plugin: rabbitmq
+            directory: rabbitmq
+            artifact_path: rabbitmq/build/RabbitmqPlugin
+            os: macos-26-intel
+            platform: macOS
+            arch: x86_64
+            compiler: clang
+            install_packages: cmake
+            configure_args: ""
+            package_suffix: macos-x86_64
+          - plugin: rabbitmq
+            directory: rabbitmq
+            artifact_path: rabbitmq/build/RabbitmqPlugin
+            os: macos-14
+            platform: macOS
+            arch: arm64
+            compiler: clang
+            install_packages: cmake
+            configure_args: ""
+            package_suffix: macos-arm64
           - plugin: servicebus
             directory: servicebus
             artifact_path: servicebus/build/ServiceBusPlugin
+            os: windows-latest
+            platform: Windows
+            arch: x86_64
+            compiler: msvc
             install_packages: build-essential cmake git ninja-build pkg-config
             configure_args: >-
               -DCMAKE_TOOLCHAIN_FILE=${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake
+            package_suffix: windows-x86_64
+          - plugin: servicebus
+            directory: servicebus
+            artifact_path: servicebus/build/ServiceBusPlugin
+            os: ubuntu-22.04
+            platform: Linux
+            arch: x86_64
+            compiler: gcc
+            install_packages: build-essential cmake git ninja-build pkg-config
+            configure_args: >-
+              -DCMAKE_TOOLCHAIN_FILE=${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake
+            package_suffix: linux-x86_64
+          - plugin: servicebus
+            directory: servicebus
+            artifact_path: servicebus/build/ServiceBusPlugin
+            os: macos-14
+            platform: macOS
+            arch: arm64
+            compiler: clang
+            install_packages: cmake ninja pkg-config
+            configure_args: >-
+              -DCMAKE_TOOLCHAIN_FILE=${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake
+            package_suffix: macos-arm64
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: Install dependencies (Ubuntu)
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y ${{ matrix.install_packages }}
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install ${{ matrix.install_packages }}
 
       - name: Configure CMake (${{ matrix.plugin }})
         working-directory: ${{ matrix.directory }}
@@ -66,13 +154,13 @@ jobs:
       - name: Package (${{ matrix.plugin }})
         run: |
           mkdir -p release-payloads
-          tar -czf "release-payloads/${{ matrix.plugin }}-linux-x86_64.tar.gz" -C "${{ matrix.artifact_path }}" .
+          tar -czf "release-payloads/${{ matrix.plugin }}-${{ matrix.package_suffix }}.tar.gz" -C "${{ matrix.artifact_path }}" .
 
       - name: Upload artifact (${{ matrix.plugin }})
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.plugin }}-linux-x86_64
-          path: release-payloads/${{ matrix.plugin }}-linux-x86_64.tar.gz
+          name: ${{ matrix.plugin }}-${{ matrix.package_suffix }}
+          path: release-payloads/${{ matrix.plugin }}-${{ matrix.package_suffix }}.tar.gz
           if-no-files-found: error
           retention-days: 30
 
