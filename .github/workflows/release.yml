@@ -23,7 +23,7 @@ on:
         description: Optional release title
         required: false
         type: string
-        default: Plugins release
+        default: ""
 
 jobs:
   build:
@@ -156,7 +156,11 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "RELEASE_TAG=${{ github.event.inputs.release_tag }}" >> "$GITHUB_ENV"
-            echo "RELEASE_NAME=${{ github.event.inputs.release_name }}" >> "$GITHUB_ENV"
+            if [ -n "${{ github.event.inputs.release_name }}" ]; then
+              echo "RELEASE_NAME=${{ github.event.inputs.release_name }}" >> "$GITHUB_ENV"
+            else
+              echo "RELEASE_NAME=${{ github.event.inputs.release_tag }}" >> "$GITHUB_ENV"
+            fi
           else
             echo "RELEASE_TAG=pr-${{ github.event.pull_request.number }}" >> "$GITHUB_ENV"
             echo "RELEASE_NAME=PR ${{ github.event.pull_request.number }} build" >> "$GITHUB_ENV"
