@@ -27,66 +27,110 @@ on:
 
 jobs:
   build:
-    name: Build ${{ matrix.plugin }} (${{ matrix.platform }} ${{ matrix.arch }})
-    runs-on: ${{ matrix.os }}
+    name: Build ${{ matrix.plugin }} (${{ matrix.platform }})
+    runs-on: ${{ matrix.platform }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - plugin: rabbitmq
-            directory: rabbitmq
-            artifact_path: rabbitmq/build/RabbitmqPlugin
-            install_packages: build-essential cmake git
-            configure_args: ""
-          - plugin: servicebus
-            directory: servicebus
-            artifact_path: servicebus/build/ServiceBusPlugin
-            install_packages: build-essential cmake git ninja-build pkg-config
-            configure_args: >-
-              -DCMAKE_TOOLCHAIN_FILE=${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake
-        platform: [
-          { os: windows-latest, platform: Windows, arch: x86_64, package_suffix: windows-x86_64, install_packages: build-essential cmake git },
-          { os: windows-11-arm, platform: Windows, arch: arm64, package_suffix: windows-arm64, install_packages: build-essential cmake git },
-          { os: ubuntu-22.04, platform: Linux, arch: x86_64, package_suffix: linux-x86_64, install_packages: build-essential cmake git },
-          { os: ubuntu-22.04-arm, platform: Linux, arch: arm64, package_suffix: linux-arm64, install_packages: build-essential cmake git },
-          { os: macos-26-intel, platform: macOS, arch: x86_64, package_suffix: macos-x86_64, install_packages: cmake },
-          { os: macos-14, platform: macOS, arch: arm64, package_suffix: macos-arm64, install_packages: cmake }
-        ]
+        plugin: [rabbitmq, servicebus]
+        platform: [windows-latest, windows-11-arm, ubuntu-22.04, ubuntu-22.04-arm, macos-26-intel, macos-14]
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Resolve build metadata
+        shell: bash
+        run: |
+          case "${{ matrix.platform }}" in
+            windows-latest)
+              echo "PLATFORM_NAME=Windows" >> "$GITHUB_ENV"
+              echo "PLATFORM_ARCH=x86_64" >> "$GITHUB_ENV"
+              echo "PACKAGE_SUFFIX=windows-x86_64" >> "$GITHUB_ENV"
+              ;;
+            windows-11-arm)
+              echo "PLATFORM_NAME=Windows" >> "$GITHUB_ENV"
+              echo "PLATFORM_ARCH=arm64" >> "$GITHUB_ENV"
+              echo "PACKAGE_SUFFIX=windows-arm64" >> "$GITHUB_ENV"
+              ;;
+            ubuntu-22.04)
+              echo "PLATFORM_NAME=Linux" >> "$GITHUB_ENV"
+              echo "PLATFORM_ARCH=x86_64" >> "$GITHUB_ENV"
+              echo "PACKAGE_SUFFIX=linux-x86_64" >> "$GITHUB_ENV"
+              ;;
+            ubuntu-22.04-arm)
+              echo "PLATFORM_NAME=Linux" >> "$GITHUB_ENV"
+              echo "PLATFORM_ARCH=arm64" >> "$GITHUB_ENV"
+              echo "PACKAGE_SUFFIX=linux-arm64" >> "$GITHUB_ENV"
+              ;;
+            macos-26-intel)
+              echo "PLATFORM_NAME=macOS" >> "$GITHUB_ENV"
+              echo "PLATFORM_ARCH=x86_64" >> "$GITHUB_ENV"
+              echo "PACKAGE_SUFFIX=macos-x86_64" >> "$GITHUB_ENV"
+              ;;
+            macos-14)
+              echo "PLATFORM_NAME=macOS" >> "$GITHUB_ENV"
+              echo "PLATFORM_ARCH=arm64" >> "$GITHUB_ENV"
+              echo "PACKAGE_SUFFIX=macos-arm64" >> "$GITHUB_ENV"
+              ;;
+          esac
+
+          if [ "${{ matrix.plugin }}" = "servicebus" ]; then
+            echo "DIRECTORY=servicebus" >> "$GITHUB_ENV"
+            echo "ARTIFACT_PATH=servicebus/build/ServiceBusPlugin" >> "$GITHUB_ENV"
+            echo "CONFIGURE_ARGS=-DCMAKE_TOOLCHAIN_FILE=${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake" >> "$GITHUB_ENV"
+            if [ "${{ runner.os }}" = "Linux" ]; then
+              echo "INSTALL_PACKAGES=build-essential cmake git ninja-build pkg-config" >> "$GITHUB_ENV"
+            elif [ "${{ runner.os }}" = "macOS" ]; then
+              echo "INSTALL_PACKAGES=cmake ninja pkg-config" >> "$GITHUB_ENV"
+            else
+              echo "INSTALL_PACKAGES=cmake" >> "$GITHUB_ENV"
+            fi
+          else
+            echo "DIRECTORY=rabbitmq" >> "$GITHUB_ENV"
+            echo "ARTIFACT_PATH=rabbitmq/build/RabbitmqPlugin" >> "$GITHUB_ENV"
+            echo "CONFIGURE_ARGS=" >> "$GITHUB_ENV"
+            if [ "${{ runner.os }}" = "Linux" ]; then
+              echo "INSTALL_PACKAGES=build-essential cmake git" >> "$GITHUB_ENV"
+            elif [ "${{ runner.os }}" = "macOS" ]; then
+              echo "INSTALL_PACKAGES=cmake" >> "$GITHUB_ENV"
+            else
+              echo "INSTALL_PACKAGES=cmake" >> "$GITHUB_ENV"
+            fi
+          fi
+
+          echo "PLUGIN_NAME=${{ matrix.plugin }}" >> "$GITHUB_ENV"
 
       - name: Install dependencies (Ubuntu)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y ${{ matrix.install_packages }}
+          sudo apt-get install -y ${{ env.INSTALL_PACKAGES }}
 
       - name: Install dependencies (macOS)
         if: runner.os == 'macOS'
         run: |
-          brew install ${{ matrix.install_packages }}
+          brew install ${{ env.INSTALL_PACKAGES }}
 
       - name: Configure CMake (${{ matrix.plugin }})
-        working-directory: ${{ matrix.directory }}
+        working-directory: ${{ env.DIRECTORY }}
         run: |
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release ${{ matrix.configure_args }}
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release ${{ env.CONFIGURE_ARGS }}
 
       - name: Build (${{ matrix.plugin }})
-        working-directory: ${{ matrix.directory }}
+        working-directory: ${{ env.DIRECTORY }}
         run: |
           cmake --build build --config Release
 
       - name: Package (${{ matrix.plugin }})
         run: |
           mkdir -p release-payloads
-          tar -czf "release-payloads/${{ matrix.plugin }}-${{ matrix.package_suffix }}.tar.gz" -C "${{ matrix.artifact_path }}" .
+          tar -czf "release-payloads/${{ env.PLUGIN_NAME }}-${{ env.PACKAGE_SUFFIX }}.tar.gz" -C "${{ env.ARTIFACT_PATH }}" .
 
       - name: Upload artifact (${{ matrix.plugin }})
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.plugin }}-${{ matrix.package_suffix }}
-          path: release-payloads/${{ matrix.plugin }}-${{ matrix.package_suffix }}.tar.gz
+          name: ${{ env.PLUGIN_NAME }}-${{ env.PACKAGE_SUFFIX }}
+          path: release-payloads/${{ env.PLUGIN_NAME }}-${{ env.PACKAGE_SUFFIX }}.tar.gz
           if-no-files-found: error
           retention-days: 30
 
