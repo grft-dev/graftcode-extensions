@@ -36,96 +36,22 @@ jobs:
           - plugin: rabbitmq
             directory: rabbitmq
             artifact_path: rabbitmq/build/RabbitmqPlugin
-            os: windows-latest
-            platform: Windows
-            arch: x86_64
-            compiler: msvc
             install_packages: build-essential cmake git
             configure_args: ""
-            package_suffix: windows-x86_64
-          - plugin: rabbitmq
-            directory: rabbitmq
-            artifact_path: rabbitmq/build/RabbitmqPlugin
-            os: windows-11-arm
-            platform: Windows
-            arch: arm64
-            compiler: msvc
-            install_packages: build-essential cmake git
-            configure_args: ""
-            package_suffix: windows-arm64
-          - plugin: rabbitmq
-            directory: rabbitmq
-            artifact_path: rabbitmq/build/RabbitmqPlugin
-            os: ubuntu-22.04
-            platform: Linux
-            arch: x86_64
-            compiler: gcc
-            install_packages: build-essential cmake git
-            configure_args: ""
-            package_suffix: linux-x86_64
-          - plugin: rabbitmq
-            directory: rabbitmq
-            artifact_path: rabbitmq/build/RabbitmqPlugin
-            os: ubuntu-22.04-arm
-            platform: Linux
-            arch: arm64
-            compiler: gcc
-            install_packages: build-essential cmake git
-            configure_args: ""
-            package_suffix: linux-arm64
-          - plugin: rabbitmq
-            directory: rabbitmq
-            artifact_path: rabbitmq/build/RabbitmqPlugin
-            os: macos-26-intel
-            platform: macOS
-            arch: x86_64
-            compiler: clang
-            install_packages: cmake
-            configure_args: ""
-            package_suffix: macos-x86_64
-          - plugin: rabbitmq
-            directory: rabbitmq
-            artifact_path: rabbitmq/build/RabbitmqPlugin
-            os: macos-14
-            platform: macOS
-            arch: arm64
-            compiler: clang
-            install_packages: cmake
-            configure_args: ""
-            package_suffix: macos-arm64
           - plugin: servicebus
             directory: servicebus
             artifact_path: servicebus/build/ServiceBusPlugin
-            os: windows-latest
-            platform: Windows
-            arch: x86_64
-            compiler: msvc
             install_packages: build-essential cmake git ninja-build pkg-config
             configure_args: >-
               -DCMAKE_TOOLCHAIN_FILE=${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake
-            package_suffix: windows-x86_64
-          - plugin: servicebus
-            directory: servicebus
-            artifact_path: servicebus/build/ServiceBusPlugin
-            os: ubuntu-22.04
-            platform: Linux
-            arch: x86_64
-            compiler: gcc
-            install_packages: build-essential cmake git ninja-build pkg-config
-            configure_args: >-
-              -DCMAKE_TOOLCHAIN_FILE=${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake
-            package_suffix: linux-x86_64
-          - plugin: servicebus
-            directory: servicebus
-            artifact_path: servicebus/build/ServiceBusPlugin
-            os: macos-14
-            platform: macOS
-            arch: arm64
-            compiler: clang
-            install_packages: cmake ninja pkg-config
-            configure_args: >-
-              -DCMAKE_TOOLCHAIN_FILE=${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake
-            package_suffix: macos-arm64
+        platform: [
+          { os: windows-latest, platform: Windows, arch: x86_64, package_suffix: windows-x86_64, install_packages: build-essential cmake git },
+          { os: windows-11-arm, platform: Windows, arch: arm64, package_suffix: windows-arm64, install_packages: build-essential cmake git },
+          { os: ubuntu-22.04, platform: Linux, arch: x86_64, package_suffix: linux-x86_64, install_packages: build-essential cmake git },
+          { os: ubuntu-22.04-arm, platform: Linux, arch: arm64, package_suffix: linux-arm64, install_packages: build-essential cmake git },
+          { os: macos-26-intel, platform: macOS, arch: x86_64, package_suffix: macos-x86_64, install_packages: cmake },
+          { os: macos-14, platform: macOS, arch: arm64, package_suffix: macos-arm64, install_packages: cmake }
+        ]
 
     steps:
       - uses: actions/checkout@v4
