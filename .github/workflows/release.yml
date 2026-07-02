@@ -3,6 +3,8 @@ name: Shared Plugin Release #d
 on:
   push:
     branches: [ "main" ]
+    tags:
+      - "v*"
     paths:
       - "rabbitmq/**"
       - "servicebus/**"
@@ -161,9 +163,16 @@ jobs:
             else
               echo "RELEASE_NAME=${{ github.event.inputs.release_tag }}" >> "$GITHUB_ENV"
             fi
-          else
+          elif [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "RELEASE_TAG=${{ github.ref_name }}" >> "$GITHUB_ENV"
+            echo "RELEASE_NAME=${{ github.ref_name }}" >> "$GITHUB_ENV"
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
             echo "RELEASE_TAG=pr-${{ github.event.pull_request.number }}" >> "$GITHUB_ENV"
             echo "RELEASE_NAME=PR ${{ github.event.pull_request.number }} build" >> "$GITHUB_ENV"
+          else
+            SHORT_SHA="${GITHUB_SHA::7}"
+            echo "RELEASE_TAG=build-${SHORT_SHA}" >> "$GITHUB_ENV"
+            echo "RELEASE_NAME=Build ${SHORT_SHA}" >> "$GITHUB_ENV"
           fi
 
       - name: Download release artifacts
@@ -180,7 +189,7 @@ jobs:
           ls -la release-files/
 
       - name: Create GitHub release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           name: ${{ env.RELEASE_NAME }}
