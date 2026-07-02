@@ -1,6 +1,12 @@
 name: Shared Plugin Release
 
 on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - "rabbitmq/**"
+      - "servicebus/**"
+      - ".github/workflows/release.yml"
   pull_request:
     branches: [ "main" ]
     paths:
