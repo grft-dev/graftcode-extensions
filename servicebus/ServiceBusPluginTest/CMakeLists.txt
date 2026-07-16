@@ -4,9 +4,11 @@ include(FetchContent)
 
 add_executable(ServiceBusPluginTests
 	"ServiceBusTransportTests.cpp"
+	"ServiceBusTelemetryTests.cpp"
 	"${CMAKE_SOURCE_DIR}/ServiceBusPlugin/TransportServiceBus.cpp"
 	"${CMAKE_SOURCE_DIR}/ServiceBusPlugin/ServiceBusClient.cpp"
 	"${CMAKE_SOURCE_DIR}/ServiceBusPlugin/ServiceBusServer.cpp"
+	"${CMAKE_SOURCE_DIR}/ServiceBusPlugin/ServiceBusTelemetry.cpp"
 )
 
 FetchContent_Declare(

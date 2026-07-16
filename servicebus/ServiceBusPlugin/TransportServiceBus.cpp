@@ -1,4 +1,5 @@
 #include "TransportServiceBus.h"
+#include "ServiceBusTelemetry.h"
 
 #include <cstdlib>
 #include <stdexcept>
@@ -31,6 +32,8 @@ int TransportServiceBus::SendCommand(byte* messageByteArray, int32_t messageByte
 	if (messageByteArray == nullptr || messageByteArrayLen < 0) {
 		throw std::runtime_error("invalid Service Bus payload");
 	}
+
+	Telemetry::ClearLastTransportSpan();
 
 	std::vector<byte> responsePayload;
 	const bool sent = ServiceBusClient::SendRpc(

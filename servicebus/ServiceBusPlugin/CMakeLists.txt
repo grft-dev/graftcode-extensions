@@ -5,6 +5,7 @@ add_library(${target_name} SHARED
         "TransportServiceBus.cpp"
         "ServiceBusClient.cpp"
         "ServiceBusServer.cpp"
+        "ServiceBusTelemetry.cpp"
 )
 
 target_include_directories(${target_name} PUBLIC

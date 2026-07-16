@@ -1,6 +1,7 @@
 #include "ServiceBusServer.h"
 
 #include "ServiceBusClient.h"
+#include "ServiceBusTelemetry.h"
 
 #include <azure/core/context.hpp>
 #include <azure/core/datetime.hpp>
@@ -32,6 +33,7 @@ typedef unsigned char byte;
 
 using namespace GraftcodeGateway;
 using namespace Graftcode::Plugins::ServiceBus;
+using namespace Graftcode::Plugins::ServiceBus::Telemetry;
 
 namespace {
 	using Json = nlohmann::json;
@@ -279,6 +281,7 @@ namespace {
 				response.Properties.GroupId = replySessionId.value();
 			}
 			response.Properties.ContentType = std::string("application/octet-stream");
+			ApplyTraceContextToMessage(response);
 
 #if defined(ENABLE_RUST_AMQP) && ENABLE_RUST_AMQP
 			return !static_cast<bool>(sender->Send(response));
@@ -414,6 +417,28 @@ void ServiceBusServer::start() {
 						continue;
 					}
 
+					const auto startedAt = std::chrono::steady_clock::now();
+					TransportSpan span;
+					span.operation = oneWay ? "receive" : "process";
+					span.queue = oneWay ? sourceAddress : config.queue;
+					span.replyQueue = config.replyQueue;
+					if (message->Properties.MessageId.HasValue()) {
+						try {
+							span.correlationId = static_cast<std::string>(message->Properties.MessageId);
+						}
+						catch (...) {
+						}
+					}
+
+					if (const auto traceContext = ExtractTraceContextFromMessage(*message)) {
+						SetInvocationContext(traceContext->traceparent, traceContext->tracestate);
+						span.traceparent = traceContext->traceparent;
+						span.tracestate = traceContext->tracestate;
+					}
+					else {
+						ClearInvocationContext();
+					}
+
 					const auto processMessage = currentProcessMessage();
 					if (processMessage == nullptr) {
 						throw std::runtime_error("Service Bus consumer: processMessage callback is not configured");
@@ -434,8 +459,19 @@ void ServiceBusServer::start() {
 
 					if (!processMessage(request.data(), request.size(), writeResponse, &response)) {
 						logWarn("Service Bus consumer: processMessage callback returned failure");
+						span.durationMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+							std::chrono::steady_clock::now() - startedAt).count();
+						span.success = false;
+						RecordTransportSpan(span);
+						ClearInvocationContext();
 						continue;
 					}
+
+					span.durationMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+						std::chrono::steady_clock::now() - startedAt).count();
+					span.success = true;
+					RecordTransportSpan(span);
+					ClearInvocationContext();
 
 					if (oneWay) {
 						// Fire-and-forget: the request targets a void method, so any

@@ -1,4 +1,5 @@
 #include "ServiceBusClient.h"
+#include "ServiceBusTelemetry.h"
 
 #include <azure/core/context.hpp>
 #include <azure/core/datetime.hpp>
@@ -25,6 +26,7 @@
 #include <vector>
 
 using namespace Graftcode::Plugins::ServiceBus;
+using namespace Graftcode::Plugins::ServiceBus::Telemetry;
 
 namespace
 {
@@ -300,6 +302,7 @@ bool ServiceBusClient::PublishOneWay(
 		message.SetBody(AmqpModels::AmqpBinaryData(body));
 		message.Properties.MessageId = AmqpModels::AmqpValue(BuildCorrelationId());
 		message.Properties.ContentType = std::string("application/octet-stream");
+		ApplyTraceContextToMessage(message);
 
 		bool sendSucceeded = false;
 #if defined(ENABLE_RUST_AMQP) && ENABLE_RUST_AMQP
@@ -352,6 +355,16 @@ bool ServiceBusClient::SendRpc(
 	const std::string connectionString = BuildConnectionString(config);
 	if (connectionString.empty()) {
 		return false;
+	}
+
+	const auto startedAt = std::chrono::steady_clock::now();
+	TransportSpan span;
+	span.operation = "rpc";
+	span.queue = config.queue;
+	span.replyQueue = config.replyQueue;
+	if (const auto context = CurrentInvocationContext()) {
+		span.traceparent = context->traceparent;
+		span.tracestate = context->tracestate;
 	}
 
 	try {
@@ -420,6 +433,8 @@ bool ServiceBusClient::SendRpc(
 		// server which session id to stamp on the response.
 		message.Properties.ReplyToGroupId = replySessionId;
 		message.Properties.ContentType = std::string("application/octet-stream");
+		ApplyTraceContextToMessage(message);
+		span.correlationId = correlationId;
 
 		bool sendSucceeded = false;
 #if defined(ENABLE_RUST_AMQP) && ENABLE_RUST_AMQP
@@ -471,10 +486,19 @@ bool ServiceBusClient::SendRpc(
 
 		receiver.Close();
 		sender.Close();
+
+		span.durationMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+			std::chrono::steady_clock::now() - startedAt).count();
+		span.success = received;
+		RecordTransportSpan(span);
 		return received;
 	}
 	catch (...) {
 		responsePayload.clear();
+		span.durationMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+			std::chrono::steady_clock::now() - startedAt).count();
+		span.success = false;
+		RecordTransportSpan(span);
 		return false;
 	}
 }

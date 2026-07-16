@@ -9,6 +9,17 @@ factory symbols (`CreateTransportChannel` / `DestroyTransportChannel` and
 It is written in C++ and talks to Azure Service Bus over its native AMQP 1.0 protocol using
 the Azure SDK for C++ AMQP library (`azure-core-amqp`), acquired through vcpkg.
 
+## Telemetry
+
+The plugin can propagate W3C `traceparent` / `tracestate` through Service Bus application
+properties and expose transport span metadata (queue, duration, success) for Hypertube and
+Application Insights integration.
+
+See [TELEMETRY.md](./TELEMETRY.md) for:
+
+- exported plugin APIs (`SetServiceBusInvocationContext`, `GetServiceBusLastTransportTelemetryJson`)
+- proposed `ITransportTelemetry` / `IServer` extensions for Hypertube and graftcode-gateway
+
 ## 1) Clone repository
 
 ```bash
