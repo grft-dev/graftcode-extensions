@@ -4,3 +4,7 @@
 
 out/
 build/
+
+bin/
+obj/
+Binaries/

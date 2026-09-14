@@ -1,0 +1,7 @@
+{
+    "name": "ServiceBusPlugin",
+    "connectionString": "${SERVICEBUS_CONNECTION_STRING}",
+    "queue": "queue-02",
+    "replyQueue": "queue-03",
+    "rpcTimeoutMs": 30000
+}
