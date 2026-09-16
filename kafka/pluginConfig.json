@@ -1,8 +1,0 @@
-{
-  "name": "KafkaPlugin",
-  "brokers": "localhost:9092",
-  "requestTopic": "graft.requests",
-  "replyTopic": "graft.replies",
-  "groupId": "graft-gateway",
-  "rpcTimeoutMs": 30000
-}
