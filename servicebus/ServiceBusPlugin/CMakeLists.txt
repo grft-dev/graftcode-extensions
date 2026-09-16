@@ -21,10 +21,7 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(json)
 
-# Pull Azure SDK sources via CMake (no vcpkg). FETCH_SOURCE_DEPS makes the
-# SDK fetch its own C deps; AZURE_SDK_DISABLE_AUTO_VCPKG blocks vcpkg bootstrap.
-set(ENV{AZURE_SDK_DISABLE_AUTO_VCPKG} ON)
-set(AZURE_SDK_DISABLE_AUTO_VCPKG ON CACHE BOOL "" FORCE)
+# Pull Azure SDK sources via CMake FetchContent.
 set(FETCH_SOURCE_DEPS ON CACHE BOOL "" FORCE)
 set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
 set(BUILD_SAMPLES OFF CACHE BOOL "" FORCE)
