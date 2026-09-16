@@ -8,12 +8,14 @@ on:
     paths:
       - "rabbitmq/**"
       - "servicebus/**"
+      - "kafka/**"
       - ".github/workflows/release.yml"
   pull_request:
     branches: [ "main" ]
     paths:
       - "rabbitmq/**"
       - "servicebus/**"
+      - "kafka/**"
       - ".github/workflows/release.yml"
   workflow_dispatch:
     inputs:
@@ -34,7 +36,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        plugin: [rabbitmq, servicebus]
+        plugin: [rabbitmq, servicebus, kafka]
         platform: [windows-latest, windows-11-arm, ubuntu-22.04, ubuntu-22.04-arm, macos-26-intel, macos-14]
 
     steps:
@@ -76,29 +78,44 @@ jobs:
               ;;
           esac
 
-          if [ "${{ matrix.plugin }}" = "servicebus" ]; then
-            echo "DIRECTORY=servicebus" >> "$GITHUB_ENV"
-            echo "ARTIFACT_PATH=servicebus/build/ServiceBusPlugin" >> "$GITHUB_ENV"
-            echo "CONFIGURE_ARGS=-DCMAKE_TOOLCHAIN_FILE=${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake" >> "$GITHUB_ENV"
-            if [ "${{ runner.os }}" = "Linux" ]; then
-              echo "INSTALL_PACKAGES=build-essential cmake git ninja-build pkg-config" >> "$GITHUB_ENV"
-            elif [ "${{ runner.os }}" = "macOS" ]; then
-              echo "INSTALL_PACKAGES=cmake ninja pkg-config" >> "$GITHUB_ENV"
-            else
-              echo "INSTALL_PACKAGES=cmake" >> "$GITHUB_ENV"
-            fi
-          else
-            echo "DIRECTORY=rabbitmq" >> "$GITHUB_ENV"
-            echo "ARTIFACT_PATH=rabbitmq/build/RabbitmqPlugin" >> "$GITHUB_ENV"
-            echo "CONFIGURE_ARGS=" >> "$GITHUB_ENV"
-            if [ "${{ runner.os }}" = "Linux" ]; then
-              echo "INSTALL_PACKAGES=build-essential cmake git" >> "$GITHUB_ENV"
-            elif [ "${{ runner.os }}" = "macOS" ]; then
-              echo "INSTALL_PACKAGES=cmake" >> "$GITHUB_ENV"
-            else
-              echo "INSTALL_PACKAGES=cmake" >> "$GITHUB_ENV"
-            fi
-          fi
+          case "${{ matrix.plugin }}" in
+            servicebus)
+              echo "DIRECTORY=servicebus" >> "$GITHUB_ENV"
+              echo "ARTIFACT_PATH=servicebus/build/ServiceBusPlugin" >> "$GITHUB_ENV"
+              echo "CONFIGURE_ARGS=" >> "$GITHUB_ENV"
+              if [ "${{ runner.os }}" = "Linux" ]; then
+                echo "INSTALL_PACKAGES=build-essential cmake git ninja-build pkg-config libcurl4-openssl-dev libssl-dev" >> "$GITHUB_ENV"
+              elif [ "${{ runner.os }}" = "macOS" ]; then
+                echo "INSTALL_PACKAGES=cmake ninja pkg-config" >> "$GITHUB_ENV"
+              else
+                echo "INSTALL_PACKAGES=cmake" >> "$GITHUB_ENV"
+              fi
+              ;;
+            kafka)
+              echo "DIRECTORY=kafka" >> "$GITHUB_ENV"
+              echo "ARTIFACT_PATH=kafka/build/KafkaPlugin" >> "$GITHUB_ENV"
+              echo "CONFIGURE_ARGS=" >> "$GITHUB_ENV"
+              if [ "${{ runner.os }}" = "Linux" ]; then
+                echo "INSTALL_PACKAGES=build-essential cmake git libssl-dev libsasl2-dev zlib1g-dev" >> "$GITHUB_ENV"
+              elif [ "${{ runner.os }}" = "macOS" ]; then
+                echo "INSTALL_PACKAGES=cmake openssl" >> "$GITHUB_ENV"
+              else
+                echo "INSTALL_PACKAGES=cmake" >> "$GITHUB_ENV"
+              fi
+              ;;
+            *)
+              echo "DIRECTORY=rabbitmq" >> "$GITHUB_ENV"
+              echo "ARTIFACT_PATH=rabbitmq/build/RabbitmqPlugin" >> "$GITHUB_ENV"
+              echo "CONFIGURE_ARGS=" >> "$GITHUB_ENV"
+              if [ "${{ runner.os }}" = "Linux" ]; then
+                echo "INSTALL_PACKAGES=build-essential cmake git" >> "$GITHUB_ENV"
+              elif [ "${{ runner.os }}" = "macOS" ]; then
+                echo "INSTALL_PACKAGES=cmake" >> "$GITHUB_ENV"
+              else
+                echo "INSTALL_PACKAGES=cmake" >> "$GITHUB_ENV"
+              fi
+              ;;
+          esac
 
           echo "PLUGIN_NAME=${{ matrix.plugin }}" >> "$GITHUB_ENV"
 
