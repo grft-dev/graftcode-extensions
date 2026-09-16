@@ -1,4 +1,4 @@
-set(CMAKE_MIN 3.22)
+set(CMAKE_MIN 3.25)
 cmake_minimum_required (VERSION ${CMAKE_MIN})
 set(CMAKE_POLICY_VERSION_MINIMUM ${CMAKE_MIN})
 cmake_policy(VERSION ${CMAKE_MIN})
