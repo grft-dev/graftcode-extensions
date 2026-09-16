@@ -1,0 +1,16 @@
+{
+  "configurations": {
+    "graft.nuget.PhysicsCalculator": {
+      "runtime": "netcore",
+      "stateless": true,
+      "plugin": {
+        "name": "KafkaPlugin",
+        "brokers": "localhost:9092",
+        "requestTopic": "graft.requests",
+        "replyTopic": "graft.replies",
+        "groupId": "graft-client",
+        "rpcTimeoutMs": 30000
+      }
+    }
+  }
+}
