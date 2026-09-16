@@ -1,9 +1,0 @@
-{
-  "name": "graftcode-kafka-plugin",
-  "version": "1.0.0",
-  "description": "Graftcode Kafka transport/server plugin built on librdkafka (rdkafka++).",
-  "dependencies": [
-    "librdkafka",
-    "nlohmann-json"
-  ]
-}
