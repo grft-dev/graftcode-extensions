@@ -25,7 +25,7 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 
 CMake downloads **nlohmann/json** and **Azure SDK for C++** (`azure-core` +
 `azure-core-amqp`) via `FetchContent`. No vcpkg toolchain is required. First
-configure needs network access for those downloads.
+configure needs network access for those downloads. On Windows the HTTP transport is WinHTTP (no libcurl); on Linux/macOS it uses libcurl.
 
 ## 3) Build
 
