@@ -7,27 +7,35 @@ factory symbols (`CreateTransportChannel` / `DestroyTransportChannel` and
 `CreateServer` / `DestroyServer`).
 
 It is written in C++ and talks to Azure Service Bus over its native AMQP 1.0 protocol using
-the Azure SDK for C++ AMQP library (`azure-core-amqp`), acquired through CMake `FetchContent`
-(same pattern as the RabbitMQ plugin).
+the Azure SDK for C++ AMQP library (`azure-core-amqp`), acquired through vcpkg.
 
 ## 1) Clone repository
 
 ```bash
-git clone https://github.com/grft-dev/graftcode-extensions.git
-cd graftcode-extensions/servicebus
+git clone https://github.com/grft-dev/graftcode-plugins.git
+cd graftcode-plugins/servicebus
 ```
 
-## 2) Configure with CMake
+## 2) Get vcpkg
+
+The plugin depends on `azure-core-amqp-cpp` and `nlohmann-json`, declared in `vcpkg.json`.
 
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+git clone https://github.com/microsoft/vcpkg.git
+./vcpkg/bootstrap-vcpkg.sh    # on Windows: .\vcpkg\bootstrap-vcpkg.bat
 ```
 
-CMake downloads **nlohmann/json** and **Azure SDK for C++** (`azure-core` +
-`azure-core-amqp`) via `FetchContent`. No vcpkg toolchain is required. First
-configure needs network access for those downloads. On Windows the HTTP transport is WinHTTP (no libcurl); on Linux/macOS it uses libcurl.
+## 3) Configure with CMake
 
-## 3) Build
+Point CMake at the vcpkg toolchain so the dependencies are installed and discovered
+automatically (manifest mode):
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_TOOLCHAIN_FILE=./vcpkg/scripts/buildsystems/vcpkg.cmake
+```
+
+## 4) Build
 
 ```bash
 cmake --build build --config Release
@@ -39,11 +47,12 @@ As a result, you will receive:
 
 If the generated library is `libServiceBusPlugin.*`, use plugin name: `libServiceBusPlugin`.
 
-## 4) Download GG
+## 5) Download GG
 
 Download `gg` from:
 - https://github.com/grft-dev/graftcode-gateway/releases/
-## 5) Create the queues
+
+## 6) Create the queues
 
 In the Azure portal (or via Azure CLI) create two queues in your Service Bus namespace, for
 example `myqueue` (requests) and `myqueue.reply` (responses). The **reply queue must be
@@ -75,7 +84,7 @@ connection string (or set `"useDevelopmentEmulator": true` in config) and point 
 emulator endpoint. See the official emulator:
 https://learn.microsoft.com/azure/service-bus-messaging/test-locally-with-service-bus-emulator
 
-## 6) Run GG with sample library
+## 7) Run GG with sample library
 
 In your sample folder, create `pluginConfig.json`:
 
@@ -101,7 +110,7 @@ Then run:
 ./gg .\PhysicsCalculator.dll --config .\pluginConfig.json
 ```
 
-## 7) Get installation command
+## 8) Get installation command
 
 Visit `http://localhost:81/GV`, select your package manager, and copy the generated
 installation command.
@@ -113,7 +122,7 @@ dotnet new console
 dotnet add package -s https://grft.dev/019cf6aa-e2e0-74e7-a2b0-be30db97ccb5__graftcode graft.nuget.physicscalculator --version 1.0.0
 ```
 
-## 8) Configure Graft after installation
+## 9) Configure Graft after installation
 
 Use this configuration:
 
@@ -207,4 +216,3 @@ Create the topic and subscription (the subscription does **not** need sessions):
 az servicebus topic create --resource-group <rg> --namespace-name <ns> --name mytopic
 az servicebus topic subscription create --resource-group <rg> --namespace-name <ns> --topic-name mytopic --name mysubscription
 ```
-

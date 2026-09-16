@@ -82,9 +82,9 @@ jobs:
             servicebus)
               echo "DIRECTORY=servicebus" >> "$GITHUB_ENV"
               echo "ARTIFACT_PATH=servicebus/build/ServiceBusPlugin" >> "$GITHUB_ENV"
-              echo "CONFIGURE_ARGS=" >> "$GITHUB_ENV"
+              echo "CONFIGURE_ARGS=-DCMAKE_TOOLCHAIN_FILE=${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake" >> "$GITHUB_ENV"
               if [ "${{ runner.os }}" = "Linux" ]; then
-                echo "INSTALL_PACKAGES=build-essential cmake git ninja-build pkg-config libcurl4-openssl-dev libssl-dev" >> "$GITHUB_ENV"
+                echo "INSTALL_PACKAGES=build-essential cmake git ninja-build pkg-config" >> "$GITHUB_ENV"
               elif [ "${{ runner.os }}" = "macOS" ]; then
                 echo "INSTALL_PACKAGES=cmake ninja pkg-config" >> "$GITHUB_ENV"
               else
