@@ -40,7 +40,7 @@ jobs:
         platform: [windows-latest, windows-11-arm, ubuntu-22.04, ubuntu-22.04-arm, macos-26-intel, macos-14]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Resolve build metadata
         shell: bash
@@ -146,7 +146,7 @@ jobs:
           tar -czf "release-payloads/${{ env.PLUGIN_NAME }}-${{ env.PACKAGE_SUFFIX }}.tar.gz" -C "${{ env.ARTIFACT_PATH }}" .
 
       - name: Upload artifact (${{ matrix.plugin }})
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ env.PLUGIN_NAME }}-${{ env.PACKAGE_SUFFIX }}
           path: release-payloads/${{ env.PLUGIN_NAME }}-${{ env.PACKAGE_SUFFIX }}.tar.gz
@@ -193,7 +193,7 @@ jobs:
           fi
 
       - name: Download release artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           path: artifacts
 
