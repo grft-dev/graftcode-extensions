@@ -8,6 +8,7 @@ add_library(${target_name} SHARED
     "SqsServer.cpp"
 )
 
+find_package(aws-cpp-sdk-core CONFIG REQUIRED)
 find_package(aws-cpp-sdk-sqs CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 
@@ -17,5 +18,6 @@ target_include_directories(${target_name} PUBLIC
 
 target_link_libraries(${target_name} PUBLIC
     aws-cpp-sdk-sqs
+    aws-cpp-sdk-core
     nlohmann_json::nlohmann_json
 )
