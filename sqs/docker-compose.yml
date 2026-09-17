@@ -1,0 +1,14 @@
+services:
+  localstack:
+    image: localstack/localstack:4.8
+    ports:
+      - "4566:4566"
+    environment:
+      SERVICES: sqs
+      AWS_DEFAULT_REGION: us-east-1
+      DEBUG: 0
+    volumes:
+      - localstack-data:/var/lib/localstack
+
+volumes:
+  localstack-data:

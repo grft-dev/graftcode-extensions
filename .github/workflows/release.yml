@@ -9,6 +9,7 @@ on:
       - "rabbitmq/**"
       - "servicebus/**"
       - "kafka/**"
+      - "sqs/**"
       - ".github/workflows/release.yml"
   pull_request:
     branches: [ "main" ]
@@ -16,6 +17,7 @@ on:
       - "rabbitmq/**"
       - "servicebus/**"
       - "kafka/**"
+      - "sqs/**"
       - ".github/workflows/release.yml"
   workflow_dispatch:
     inputs:
@@ -36,7 +38,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        plugin: [rabbitmq, servicebus, kafka]
+        plugin: [rabbitmq, servicebus, kafka, sqs]
         platform: [windows-latest, windows-11-arm, ubuntu-22.04, ubuntu-22.04-arm, macos-26-intel, macos-14]
 
     steps:
@@ -82,6 +84,18 @@ jobs:
             servicebus)
               echo "DIRECTORY=servicebus" >> "$GITHUB_ENV"
               echo "ARTIFACT_PATH=servicebus/build/ServiceBusPlugin" >> "$GITHUB_ENV"
+              echo "CONFIGURE_ARGS=-DCMAKE_TOOLCHAIN_FILE=${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake" >> "$GITHUB_ENV"
+              if [ "${{ runner.os }}" = "Linux" ]; then
+                echo "INSTALL_PACKAGES=build-essential cmake git ninja-build pkg-config" >> "$GITHUB_ENV"
+              elif [ "${{ runner.os }}" = "macOS" ]; then
+                echo "INSTALL_PACKAGES=cmake ninja pkg-config" >> "$GITHUB_ENV"
+              else
+                echo "INSTALL_PACKAGES=cmake" >> "$GITHUB_ENV"
+              fi
+              ;;
+            sqs)
+              echo "DIRECTORY=sqs" >> "$GITHUB_ENV"
+              echo "ARTIFACT_PATH=sqs/build/SqsPlugin" >> "$GITHUB_ENV"
               echo "CONFIGURE_ARGS=-DCMAKE_TOOLCHAIN_FILE=${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake" >> "$GITHUB_ENV"
               if [ "${{ runner.os }}" = "Linux" ]; then
                 echo "INSTALL_PACKAGES=build-essential cmake git ninja-build pkg-config" >> "$GITHUB_ENV"
@@ -139,6 +153,11 @@ jobs:
         working-directory: ${{ env.DIRECTORY }}
         run: |
           cmake --build build --config Release
+
+      - name: Test (${{ matrix.plugin }})
+        working-directory: ${{ env.DIRECTORY }}
+        run: |
+          ctest --test-dir build -C Release --output-on-failure
 
       - name: Package (${{ matrix.plugin }})
         run: |
