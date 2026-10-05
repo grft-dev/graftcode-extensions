@@ -42,6 +42,20 @@ target_include_directories(SqsPluginSmoke PRIVATE
     "${CMAKE_SOURCE_DIR}/GraftcodePluginsInterfaces"
 )
 add_test(NAME SqsPluginSmoke COMMAND SqsPluginSmoke)
+set_tests_properties(SqsPluginSmoke PROPERTIES TIMEOUT 60)
+
+# Windows has no rpath. Copy the plugin and AWS SDK DLLs next to each
+# test executable so the loader does not block on a missing-DLL dialog.
+if(WIN32)
+    foreach(sqs_test_target SqsPluginSmoke SqsPluginTests)
+        add_custom_command(TARGET ${sqs_test_target} POST_BUILD
+            COMMAND ${CMAKE_COMMAND}
+                "-DDEST=$<TARGET_FILE_DIR:${sqs_test_target}>"
+                "-DDLL_LIST=$<JOIN:$<TARGET_RUNTIME_DLLS:${sqs_test_target}>,|>"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/copy_runtime_dlls.cmake"
+            VERBATIM)
+    endforeach()
+endif()
 
 include(GoogleTest)
 gtest_discover_tests(SqsPluginTests)

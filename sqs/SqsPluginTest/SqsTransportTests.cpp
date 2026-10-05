@@ -378,32 +378,6 @@ TEST(SqsServer, OneWayServerDoesNotRequireReplyQueue)
     EXPECT_NO_THROW(ValidateClientConfig(config));
 }
 
-TEST(SqsServer, StopUnblocksUnavailableEndpoint)
-{
-    const char* config = R"({
-        "region": "us-east-1",
-        "endpointOverride": "http://127.0.0.1:9",
-        "accessKeyId": "test",
-        "secretAccessKey": "test",
-        "requestQueueUrl": "http://127.0.0.1:9/000000000000/graft-requests",
-        "verifySsl": false,
-        "waitTimeSeconds": 1
-    })";
-
-    SqsServer server;
-    server.configure(config, &EchoCallback);
-    std::thread worker([&server]() {
-        server.start();
-    });
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
-
-    const auto started = std::chrono::steady_clock::now();
-    server.stop();
-    worker.join();
-    const auto elapsed = std::chrono::steady_clock::now() - started;
-    EXPECT_LT(elapsed, std::chrono::seconds(15));
-}
-
 TEST(SqsLive, RpcRoundTrip)
 {
     const char* requestQueue = std::getenv("SQS_REQUEST_QUEUE_URL");

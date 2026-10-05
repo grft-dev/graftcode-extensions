@@ -1,0 +1,23 @@
+if(NOT DEFINED DEST OR DEST STREQUAL "")
+    message(FATAL_ERROR "DEST is required")
+endif()
+if(NOT DEFINED DLL_LIST OR DLL_LIST STREQUAL "")
+    return()
+endif()
+
+file(MAKE_DIRECTORY "${DEST}")
+string(REPLACE "|" ";" dlls "${DLL_LIST}")
+foreach(dll IN LISTS dlls)
+    if(dll STREQUAL "")
+        continue()
+    endif()
+    if(NOT EXISTS "${dll}")
+        message(FATAL_ERROR "runtime DLL does not exist: ${dll}")
+    endif()
+    execute_process(
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${dll}" "${DEST}"
+        RESULT_VARIABLE copy_result)
+    if(NOT copy_result EQUAL 0)
+        message(FATAL_ERROR "failed to copy ${dll} to ${DEST}")
+    endif()
+endforeach()
