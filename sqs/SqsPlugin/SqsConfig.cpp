@@ -5,7 +5,6 @@
 #include <filesystem>
 #include <fstream>
 #include <limits>
-#include <optional>
 #include <sstream>
 #include <stdexcept>
 
@@ -38,6 +37,43 @@ namespace Graftcode::Plugins::Sqs
             return Json::parse(contents.str());
         }
 
+        bool HasSpecificSqsKeys(const Json& node)
+        {
+            return node.contains("requestQueueUrl") ||
+                node.contains("replyQueueUrl") ||
+                node.contains("queueUrl") ||
+                node.contains("endpointOverride") ||
+                node.contains("accessKeyId") ||
+                node.contains("secretAccessKey") ||
+                node.contains("visibilityTimeoutSeconds") ||
+                node.contains("waitTimeSeconds") ||
+                node.contains("messageGroupId");
+        }
+
+        bool IsFlatSqsAlias(const Json& node)
+        {
+            const bool hasAlias =
+                node.contains("queue") || node.contains("replyQueue");
+            if (!hasAlias) {
+                return false;
+            }
+            if (node.contains("region") ||
+                node.contains("endpointOverride") ||
+                node.contains("accessKeyId") ||
+                node.contains("messageGroupId")) {
+                return true;
+            }
+            const auto name = node.find("name");
+            if (name != node.end() && name->is_string()) {
+                const auto pluginName = name->get<std::string>();
+                if (pluginName.find("Sqs") != std::string::npos ||
+                    pluginName.find("sqs") != std::string::npos) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         const Json* FindSqsNode(const Json& node)
         {
             if (node.is_object()) {
@@ -46,14 +82,7 @@ namespace Graftcode::Plugins::Sqs
                     return &(*sqs);
                 }
 
-                const bool hasSqsKeys =
-                    node.contains("requestQueueUrl") ||
-                    node.contains("replyQueueUrl") ||
-                    node.contains("queueUrl") ||
-                    node.contains("queue") ||
-                    node.contains("replyQueue") ||
-                    node.contains("endpointOverride");
-                if (hasSqsKeys) {
+                if (HasSpecificSqsKeys(node) || IsFlatSqsAlias(node)) {
                     return &node;
                 }
 
@@ -127,7 +156,8 @@ namespace Graftcode::Plugins::Sqs
         const Json root = ParseJsonSource(configSource);
         const Json* node = FindSqsNode(root);
         if (node == nullptr || !node->is_object()) {
-            throw std::runtime_error("SQS plugin: configuration must be a JSON object");
+            throw std::runtime_error(
+                "SQS plugin: configuration does not contain SQS settings");
         }
 
         SqsConfig config;
@@ -171,6 +201,10 @@ namespace Graftcode::Plugins::Sqs
         if (config.region.empty()) {
             throw std::runtime_error("SQS plugin: 'region' cannot be empty");
         }
+        if (config.messageGroupId.size() > 128) {
+            throw std::runtime_error(
+                "SQS plugin: 'messageGroupId' cannot exceed 128 characters");
+        }
 
         const bool hasAccessKey = !config.accessKeyId.empty();
         const bool hasSecretKey = !config.secretAccessKey.empty();
@@ -200,6 +234,47 @@ namespace Graftcode::Plugins::Sqs
             throw std::runtime_error(
                 "SQS server: missing required field 'requestQueueUrl'");
         }
+    }
+
+    ParsedEndpoint ParseEndpointOverride(const std::string& endpointOverride)
+    {
+        ParsedEndpoint parsed;
+        std::string value = endpointOverride;
+        while (!value.empty() &&
+            (value.back() == ' ' || value.back() == '\t')) {
+            value.pop_back();
+        }
+        std::size_t begin = 0;
+        while (begin < value.size() &&
+            (value[begin] == ' ' || value[begin] == '\t')) {
+            ++begin;
+        }
+        value.erase(0, begin);
+        if (value.empty()) {
+            return parsed;
+        }
+
+        parsed.overridden = true;
+        parsed.useHttps = true;
+        constexpr const char* http = "http://";
+        constexpr const char* https = "https://";
+        if (value.rfind(http, 0) == 0) {
+            parsed.useHttps = false;
+            value.erase(0, 7);
+        }
+        else if (value.rfind(https, 0) == 0) {
+            parsed.useHttps = true;
+            value.erase(0, 8);
+        }
+        while (!value.empty() && value.back() == '/') {
+            value.pop_back();
+        }
+        if (value.empty()) {
+            throw std::runtime_error(
+                "SQS plugin: 'endpointOverride' is missing a host");
+        }
+        parsed.authority = std::move(value);
+        return parsed;
     }
 
     bool IsFifoQueueUrl(const std::string& queueUrl)

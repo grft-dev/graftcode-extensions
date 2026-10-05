@@ -6,6 +6,19 @@
 #include <stdexcept>
 #include <string>
 
+namespace Graftcode::Plugins::Sqs
+{
+    void RejectGatewayErrorPayload(const std::vector<unsigned char>& payload)
+    {
+        if (!payload.empty() &&
+            payload.front() == static_cast<unsigned char>(255)) {
+            throw std::runtime_error(
+                std::string(payload.begin() + 1, payload.end()));
+        }
+    }
+}
+
+using Graftcode::Plugins::Sqs::RejectGatewayErrorPayload;
 using Graftcode::Plugins::Sqs::SqsClient;
 using Graftcode::Plugins::Sqs::TransportSqs;
 
@@ -33,9 +46,7 @@ int TransportSqs::SendCommand(
     std::vector<byte> response = client_->Call(
         messageByteArray,
         static_cast<std::size_t>(messageByteArrayLen));
-    if (!response.empty() && response.front() == static_cast<byte>(255)) {
-        throw std::runtime_error(std::string(response.begin() + 1, response.end()));
-    }
+    RejectGatewayErrorPayload(response);
 
     const int responseSize = static_cast<int>(response.size());
     {

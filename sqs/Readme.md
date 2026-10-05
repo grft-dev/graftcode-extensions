@@ -23,20 +23,26 @@ reply queue between independent processes. Calls made through one transport
 instance are serialized.
 
 Standard and FIFO queues are supported. For a FIFO queue URL ending in
-`.fifo`, the plugin automatically sets `MessageGroupId` and
-`MessageDeduplicationId`.
+`.fifo`, the plugin sets `MessageGroupId` (default `graftcode`) and a
+`MessageDeduplicationId`. Request sends reuse the call's correlation id so an
+SDK retry does not enqueue a second request. Reply sends use a new id so a
+redelivered request can still publish a response inside FIFO's deduplication
+window.
+
+Encoded bodies larger than 1 MiB are rejected. Some LocalStack versions and
+older queue settings still enforce the historical 256 KiB quota.
 
 ## Build
 
 The plugin uses the AWS SDK for C++ (`sqs`) and `nlohmann-json`, installed in
 vcpkg manifest mode.
 
-```powershell
+```bash
 git clone https://github.com/microsoft/vcpkg.git
-.\vcpkg\bootstrap-vcpkg.bat
+./vcpkg/bootstrap-vcpkg.sh   # Windows: .\vcpkg\bootstrap-vcpkg.bat
 
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release `
-  -DCMAKE_TOOLCHAIN_FILE=.\vcpkg\scripts\buildsystems\vcpkg.cmake
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_TOOLCHAIN_FILE=./vcpkg/scripts/buildsystems/vcpkg.cmake
 cmake --build build --config Release
 ctest --test-dir build -C Release --output-on-failure
 ```
@@ -116,10 +122,18 @@ without sending a response.
 
 ## LocalStack
 
-Start the included LocalStack setup:
+Sample connection files and a LocalStack compose file live in
+[`samples/sqs`](../samples/sqs/README.md). From this directory you can also
+start LocalStack directly; the compose file creates `graft-requests` and
+`graft-replies` on startup:
 
 ```bash
 docker compose up -d
+```
+
+Create the queues manually if the init hook did not run:
+
+```bash
 aws --endpoint-url http://localhost:4566 sqs create-queue --queue-name graft-requests
 aws --endpoint-url http://localhost:4566 sqs create-queue --queue-name graft-replies
 ```
@@ -149,7 +163,9 @@ Use this additional configuration:
   defaults to `30`. Set it longer than the maximum call execution time.
 - `oneWay` — process without a response; defaults to `false`.
 - `messageGroupId` — FIFO message group; defaults to `graftcode`.
-- `endpointOverride` — custom SQS endpoint, such as LocalStack.
+- `endpointOverride` — custom SQS endpoint, such as LocalStack. `http://`
+  selects plain HTTP; `https://` keeps TLS. The host (and optional port) is
+  what the AWS SDK receives.
 - `verifySsl` — TLS certificate verification; defaults to `true`.
 - `accessKeyId`, `secretAccessKey`, `sessionToken` — optional explicit
   credentials; otherwise the AWS SDK provider chain is used.

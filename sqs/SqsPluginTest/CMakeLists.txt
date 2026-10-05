@@ -26,12 +26,22 @@ target_include_directories(SqsPluginTests PRIVATE
     "${CMAKE_SOURCE_DIR}/GraftcodePluginsInterfaces"
 )
 
+find_package(Threads REQUIRED)
+
 target_link_libraries(SqsPluginTests PRIVATE
     gtest_main
     aws-cpp-sdk-sqs
     aws-cpp-sdk-core
     nlohmann_json::nlohmann_json
+    Threads::Threads
 )
+
+add_executable(SqsPluginSmoke smoke.cpp)
+target_link_libraries(SqsPluginSmoke PRIVATE SqsPlugin)
+target_include_directories(SqsPluginSmoke PRIVATE
+    "${CMAKE_SOURCE_DIR}/GraftcodePluginsInterfaces"
+)
+add_test(NAME SqsPluginSmoke COMMAND SqsPluginSmoke)
 
 include(GoogleTest)
 gtest_discover_tests(SqsPluginTests)

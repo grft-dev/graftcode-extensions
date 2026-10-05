@@ -5,6 +5,7 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <memory>
 #include <mutex>
 
 namespace Aws::SQS
@@ -31,7 +32,7 @@ namespace Graftcode::Plugins::Sqs
         ProcessMessageFn processMessage_{ nullptr };
         std::mutex stateMutex_;
         std::condition_variable stoppedCondition_;
-        Aws::SQS::SQSClient* activeClient_{ nullptr };
+        std::shared_ptr<Aws::SQS::SQSClient> activeClient_;
         std::atomic_bool stopRequested_{ false };
         std::atomic_bool running_{ false };
     };

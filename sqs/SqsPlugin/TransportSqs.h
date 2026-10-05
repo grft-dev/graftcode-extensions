@@ -34,4 +34,6 @@ namespace Graftcode::Plugins::Sqs
         std::map<std::thread::id, std::vector<byte>> responses_;
         std::mutex responsesMutex_;
     };
+
+    void RejectGatewayErrorPayload(const std::vector<unsigned char>& payload);
 }

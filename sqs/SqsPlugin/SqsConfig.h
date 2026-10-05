@@ -23,8 +23,16 @@ namespace Graftcode::Plugins::Sqs
         bool verifySsl{ true };
     };
 
+    struct ParsedEndpoint
+    {
+        bool overridden{ false };
+        bool useHttps{ true };
+        std::string authority;
+    };
+
     SqsConfig ParseSqsConfigSource(const std::string& configSource);
     void ValidateClientConfig(const SqsConfig& config);
     void ValidateServerConfig(const SqsConfig& config);
     bool IsFifoQueueUrl(const std::string& queueUrl);
+    ParsedEndpoint ParseEndpointOverride(const std::string& endpointOverride);
 }

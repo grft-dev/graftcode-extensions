@@ -1,0 +1,13 @@
+{
+  "name": "SqsPlugin",
+  "region": "us-east-1",
+  "endpointOverride": "http://localhost:4566",
+  "accessKeyId": "test",
+  "secretAccessKey": "test",
+  "requestQueueUrl": "http://localhost:4566/000000000000/graft-requests",
+  "replyQueueUrl": "http://localhost:4566/000000000000/graft-replies",
+  "rpcTimeoutMs": 30000,
+  "waitTimeSeconds": 2,
+  "visibilityTimeoutSeconds": 30,
+  "verifySsl": false
+}

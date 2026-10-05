@@ -5,6 +5,7 @@
 #include <aws/sqs/model/Message.h>
 #include <aws/sqs/model/SendMessageRequest.h>
 
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <vector>
@@ -19,6 +20,8 @@ namespace Graftcode::Plugins::Sqs
     inline constexpr const char* CorrelationIdAttribute =
         "GraftcodeCorrelationId";
     inline constexpr const char* ReplyToAttribute = "GraftcodeReplyTo";
+    // Standard SQS quota. Base64 bodies larger than this are rejected before send.
+    inline constexpr std::size_t MaxEncodedBodyBytes = 1024 * 1024;
 
     std::unique_ptr<Aws::SQS::SQSClient> CreateAwsSqsClient(
         const SqsConfig& config);

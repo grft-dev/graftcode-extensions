@@ -38,6 +38,17 @@ namespace Graftcode::Plugins::Sqs
             attribute.SetStringValue(value.c_str());
             return attribute;
         }
+
+        void SleepUnlessStopped(
+            const std::atomic_bool& stopRequested,
+            std::chrono::milliseconds duration)
+        {
+            const auto deadline = std::chrono::steady_clock::now() + duration;
+            while (!stopRequested.load(std::memory_order_acquire) &&
+                std::chrono::steady_clock::now() < deadline) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+        }
     }
 
     SqsServer::~SqsServer()
@@ -69,12 +80,17 @@ namespace Graftcode::Plugins::Sqs
 
     void SqsServer::start()
     {
-        bool expected = false;
-        if (!running_.compare_exchange_strong(expected, true)) {
-            return;
+        {
+            std::lock_guard<std::mutex> lock(stateMutex_);
+            if (running_.load(std::memory_order_relaxed)) {
+                return;
+            }
+            // Clear the flag in the same critical section that publishes
+            // running, so a stop() that arrives afterwards cannot be lost.
+            stopRequested_.store(false, std::memory_order_relaxed);
+            running_.store(true, std::memory_order_release);
         }
 
-        stopRequested_.store(false, std::memory_order_release);
         SqsConfig config;
         ProcessMessageFn processMessage = nullptr;
         {
@@ -90,10 +106,11 @@ namespace Graftcode::Plugins::Sqs
                     "SQS server: processMessage callback is not configured");
             }
 
-            auto client = CreateAwsSqsClient(config);
+            std::shared_ptr<Aws::SQS::SQSClient> client{
+                CreateAwsSqsClient(config)};
             {
                 std::lock_guard<std::mutex> lock(stateMutex_);
-                activeClient_ = client.get();
+                activeClient_ = client;
                 if (stopRequested_.load(std::memory_order_acquire)) {
                     activeClient_->DisableRequestProcessing();
                 }
@@ -119,7 +136,9 @@ namespace Graftcode::Plugins::Sqs
                             "ReceiveMessage failed: " +
                             std::string(
                                 receiveOutcome.GetError().GetMessage().c_str()));
-                        std::this_thread::sleep_for(std::chrono::seconds(2));
+                        SleepUnlessStopped(
+                            stopRequested_,
+                            std::chrono::seconds(2));
                     }
                     continue;
                 }
@@ -189,13 +208,14 @@ namespace Graftcode::Plugins::Sqs
                             send.AddMessageAttributes(
                                 CorrelationIdAttribute,
                                 StringAttribute(correlationId));
+                            // A fresh deduplication id lets a redelivered request
+                            // publish another reply. Reusing the correlation id
+                            // would drop that retry inside FIFO's 5-minute window.
                             ConfigureFifoMessage(
                                 send,
                                 replyQueueUrl,
                                 config.messageGroupId,
-                                correlationId.empty()
-                                    ? NewCorrelationId()
-                                    : correlationId);
+                                NewCorrelationId());
 
                             const auto sendOutcome = client->SendMessage(send);
                             if (!sendOutcome.IsSuccess()) {
@@ -239,7 +259,7 @@ namespace Graftcode::Plugins::Sqs
 
         {
             std::lock_guard<std::mutex> lock(stateMutex_);
-            activeClient_ = nullptr;
+            activeClient_.reset();
             running_.store(false, std::memory_order_release);
         }
         stoppedCondition_.notify_all();
@@ -247,11 +267,17 @@ namespace Graftcode::Plugins::Sqs
 
     void SqsServer::stop()
     {
-        stopRequested_.store(true, std::memory_order_release);
-        std::unique_lock<std::mutex> lock(stateMutex_);
-        if (activeClient_ != nullptr) {
-            activeClient_->DisableRequestProcessing();
+        std::shared_ptr<Aws::SQS::SQSClient> client;
+        {
+            std::lock_guard<std::mutex> lock(stateMutex_);
+            stopRequested_.store(true, std::memory_order_release);
+            client = activeClient_;
         }
+        if (client != nullptr) {
+            client->DisableRequestProcessing();
+        }
+
+        std::unique_lock<std::mutex> lock(stateMutex_);
         stoppedCondition_.wait(lock, [this]() {
             return !running_.load(std::memory_order_acquire);
         });

@@ -7,9 +7,16 @@
 #include <aws/core/utils/HashingUtils.h>
 #include <aws/sqs/SQSClient.h>
 
+#include <aws/core/http/Scheme.h>
+
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <condition_variable>
+#include <cstdlib>
+#if !defined(_WIN32)
+#include <unistd.h>
+#endif
 #include <iomanip>
 #include <mutex>
 #include <random>
@@ -68,6 +75,53 @@ namespace Graftcode::Plugins::Sqs
             static AwsSdkLifetime lifetime;
             (void)lifetime;
         }
+
+        void DisableImdsLookupForEmulator()
+        {
+            // Local emulators have no EC2 metadata service. Leaving the default
+            // provider chain enabled adds multi-second timeouts when static
+            // credentials were not supplied.
+#if defined(_WIN32)
+            char* existing = nullptr;
+            std::size_t length = 0;
+            if (_dupenv_s(&existing, &length, "AWS_EC2_METADATA_DISABLED") != 0 ||
+                existing == nullptr) {
+                _putenv_s("AWS_EC2_METADATA_DISABLED", "true");
+            }
+            std::free(existing);
+#else
+            setenv("AWS_EC2_METADATA_DISABLED", "true", 0);
+#endif
+        }
+
+        bool IsValidBase64(const Aws::String& value)
+        {
+            if (value.empty()) {
+                return true;
+            }
+            if (value.size() % 4 != 0) {
+                return false;
+            }
+
+            bool padding = false;
+            for (const char character : value) {
+                if (character == '=') {
+                    padding = true;
+                    continue;
+                }
+                if (padding) {
+                    return false;
+                }
+                const bool alphabet =
+                    std::isalnum(static_cast<unsigned char>(character)) ||
+                    character == '+' ||
+                    character == '/';
+                if (!alphabet) {
+                    return false;
+                }
+            }
+            return true;
+        }
     }
 
     std::unique_ptr<Aws::SQS::SQSClient> CreateAwsSqsClient(
@@ -79,12 +133,27 @@ namespace Graftcode::Plugins::Sqs
         clientConfig.region = config.region.c_str();
         clientConfig.verifySSL = config.verifySsl;
         clientConfig.connectTimeoutMs = 5000;
-        clientConfig.requestTimeoutMs = static_cast<long>(
+        // requestTimeoutMs is the Windows read timeout and the Curl low-speed
+        // window. httpRequestTimeoutMs is the Curl total transfer timeout.
+        // Both must outlive SQS long polling.
+        const long timeoutMs = static_cast<long>(
             (std::max)(
                 std::uint32_t{ 30000 },
                 (config.waitTimeSeconds + 5) * 1000));
-        if (!config.endpointOverride.empty()) {
-            clientConfig.endpointOverride = config.endpointOverride.c_str();
+        clientConfig.requestTimeoutMs = timeoutMs;
+        clientConfig.httpRequestTimeoutMs = timeoutMs;
+
+        const ParsedEndpoint endpoint =
+            ParseEndpointOverride(config.endpointOverride);
+        if (endpoint.overridden) {
+            DisableImdsLookupForEmulator();
+            clientConfig.scheme = endpoint.useHttps
+                ? Aws::Http::Scheme::HTTPS
+                : Aws::Http::Scheme::HTTP;
+            clientConfig.endpointOverride = endpoint.authority.c_str();
+            if (!endpoint.useHttps) {
+                clientConfig.verifySSL = false;
+            }
         }
 
         if (!config.accessKeyId.empty()) {
@@ -112,7 +181,7 @@ namespace Graftcode::Plugins::Sqs
             size);
         Aws::String encoded = "graftcode-base64:";
         encoded += Aws::Utils::HashingUtils::Base64Encode(bytes);
-        if (encoded.size() > 1024 * 1024) {
+        if (encoded.size() > MaxEncodedBodyBytes) {
             throw std::runtime_error(
                 "SQS plugin: encoded payload exceeds the 1 MiB SQS limit");
         }
@@ -129,9 +198,19 @@ namespace Graftcode::Plugins::Sqs
                 "SQS plugin: message body has an unsupported encoding");
         }
 
+        const Aws::String encoded = body.substr(prefixSize);
+        if (!IsValidBase64(encoded)) {
+            throw std::runtime_error(
+                "SQS plugin: message body is not valid base64");
+        }
+
         const Aws::Utils::ByteBuffer decoded =
-            Aws::Utils::HashingUtils::Base64Decode(body.substr(prefixSize));
+            Aws::Utils::HashingUtils::Base64Decode(encoded);
         if (decoded.GetLength() == 0) {
+            if (!encoded.empty()) {
+                throw std::runtime_error(
+                    "SQS plugin: failed to decode message body");
+            }
             return {};
         }
         return std::vector<unsigned char>(

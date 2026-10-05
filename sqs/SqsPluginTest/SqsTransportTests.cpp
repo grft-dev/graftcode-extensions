@@ -6,10 +6,17 @@
 #include "SqsConfig.h"
 #include "SqsServer.h"
 #include "SqsUtil.h"
+#include "TransportSqs.h"
 
+#include <aws/sqs/model/SendMessageRequest.h>
+
+#include <atomic>
 #include <chrono>
 #include <cstdlib>
+#include <algorithm>
 #include <exception>
+#include <filesystem>
+#include <fstream>
 #include <memory>
 #include <string>
 #include <thread>
@@ -22,15 +29,22 @@ CreateTransportChannel(
     const char* configSource);
 extern "C" void DestroyTransportChannel(
     Hypertube::Native::Interfaces::ITransport* transport);
+extern "C" GraftcodeGateway::IServer* CreateServer();
+extern "C" void DestroyServer(GraftcodeGateway::IServer* server);
 
+using Graftcode::Plugins::Sqs::ConfigureFifoMessage;
 using Graftcode::Plugins::Sqs::DecodePayload;
 using Graftcode::Plugins::Sqs::EncodePayload;
 using Graftcode::Plugins::Sqs::IsFifoQueueUrl;
+using Graftcode::Plugins::Sqs::MaxEncodedBodyBytes;
+using Graftcode::Plugins::Sqs::ParseEndpointOverride;
 using Graftcode::Plugins::Sqs::ParseSqsConfigSource;
+using Graftcode::Plugins::Sqs::RejectGatewayErrorPayload;
 using Graftcode::Plugins::Sqs::SqsClient;
 using Graftcode::Plugins::Sqs::SqsConfig;
 using Graftcode::Plugins::Sqs::SqsServer;
 using Graftcode::Plugins::Sqs::ValidateClientConfig;
+using Graftcode::Plugins::Sqs::ValidateServerConfig;
 
 namespace
 {
@@ -60,6 +74,22 @@ namespace
     {
         writeResponse(context, data, size);
         return true;
+    }
+
+    std::atomic_bool g_oneWaySeen{ false };
+
+    bool RecordOneWayCallback(
+        const unsigned char* data,
+        std::size_t size,
+        GraftcodeGateway::IServer::WriteResponseFn,
+        void*)
+    {
+        const bool matches =
+            data != nullptr &&
+            size == kPayload.size() &&
+            std::equal(data, data + size, kPayload.begin());
+        g_oneWaySeen.store(matches);
+        return matches;
     }
 
     std::string EnvOr(const char* name, const char* fallback)
@@ -146,13 +176,232 @@ TEST(SqsConfig, DetectsFifoQueueUrls)
     EXPECT_TRUE(IsFifoQueueUrl("https://localhost/a.fifo/"));
     EXPECT_TRUE(IsFifoQueueUrl("https://localhost/a.fifo?x=1"));
     EXPECT_FALSE(IsFifoQueueUrl("https://sqs.us-east-1.amazonaws.com/1/a"));
+    EXPECT_FALSE(IsFifoQueueUrl("https://localhost/a.fifo.queue"));
+}
+
+TEST(SqsConfig, AcceptsFlatQueueAlias)
+{
+    const SqsConfig config = ParseSqsConfigSource(R"({
+        "name": "SqsPlugin",
+        "region": "eu-central-1",
+        "queue": "https://example/requests",
+        "replyQueue": "https://example/replies"
+    })");
+
+    EXPECT_EQ(config.requestQueueUrl, "https://example/requests");
+    EXPECT_EQ(config.replyQueueUrl, "https://example/replies");
+    EXPECT_EQ(config.region, "eu-central-1");
+}
+
+TEST(SqsConfig, ReadsNestedAliasAheadOfForeignQueue)
+{
+    const SqsConfig config = ParseSqsConfigSource(R"({
+        "configurations": {
+            "other": {
+                "plugin": {
+                    "name": "RabbitmqPlugin",
+                    "queue": "myqueue",
+                    "host": "localhost"
+                }
+            },
+            "calculator": {
+                "plugin": {
+                    "name": "SqsPlugin",
+                    "region": "us-west-2",
+                    "queue": "https://example/requests",
+                    "replyQueue": "https://example/replies"
+                }
+            }
+        }
+    })");
+
+    EXPECT_EQ(config.region, "us-west-2");
+    EXPECT_EQ(config.requestQueueUrl, "https://example/requests");
+}
+
+TEST(SqsConfig, RejectsForeignQueueConfig)
+{
+    EXPECT_THROW(
+        ParseSqsConfigSource(R"({
+            "name": "RabbitmqPlugin",
+            "queue": "myqueue",
+            "host": "localhost"
+        })"),
+        std::runtime_error);
+}
+
+TEST(SqsConfig, ReadsConfigurationFile)
+{
+    const auto path =
+        std::filesystem::temp_directory_path() / "graftcode-sqs-config.json";
+    {
+        std::ofstream file(path);
+        ASSERT_TRUE(file.good());
+        file << R"({
+            "region": "ap-southeast-2",
+            "queueUrl": "https://example/from-file",
+            "replyQueueUrl": "https://example/from-file-replies",
+            "oneWay": false
+        })";
+    }
+
+    const SqsConfig config = ParseSqsConfigSource(path.string());
+    EXPECT_EQ(config.region, "ap-southeast-2");
+    EXPECT_EQ(config.requestQueueUrl, "https://example/from-file");
+    std::filesystem::remove(path);
+}
+
+TEST(SqsConfig, RejectsInvalidValues)
+{
+    EXPECT_THROW(
+        ParseSqsConfigSource(R"({"waitTimeSeconds": 21, "requestQueueUrl": "q"})"),
+        std::runtime_error);
+    EXPECT_THROW(
+        ParseSqsConfigSource(
+            R"({"visibilityTimeoutSeconds": 43201, "requestQueueUrl": "q"})"),
+        std::runtime_error);
+    EXPECT_THROW(
+        ParseSqsConfigSource(
+            R"({"accessKeyId": "only-one", "requestQueueUrl": "q"})"),
+        std::runtime_error);
+    EXPECT_THROW(
+        ParseSqsConfigSource(R"({"oneWay": "yes", "requestQueueUrl": "q"})"),
+        std::runtime_error);
+    EXPECT_THROW(
+        ParseSqsConfigSource(R"({"messageGroupId": ")" +
+            std::string(129, 'g') +
+            R"(", "requestQueueUrl": "q"})"),
+        std::runtime_error);
+    EXPECT_THROW(ParseSqsConfigSource(""), std::runtime_error);
+    EXPECT_THROW(ParseSqsConfigSource("not-json-or-a-file"), std::runtime_error);
+}
+
+TEST(SqsConfig, ParsesEndpointOverride)
+{
+    const auto httpEndpoint = ParseEndpointOverride("http://localhost:4566/");
+    EXPECT_TRUE(httpEndpoint.overridden);
+    EXPECT_FALSE(httpEndpoint.useHttps);
+    EXPECT_EQ(httpEndpoint.authority, "localhost:4566");
+
+    const auto httpsEndpoint =
+        ParseEndpointOverride(" https://sqs.example:443 ");
+    EXPECT_TRUE(httpsEndpoint.useHttps);
+    EXPECT_EQ(httpsEndpoint.authority, "sqs.example:443");
+
+    EXPECT_FALSE(ParseEndpointOverride("").overridden);
+    EXPECT_THROW(ParseEndpointOverride("http:///"), std::runtime_error);
+}
+
+TEST(SqsPayload, RejectsUnsupportedAndOversizedBodies)
+{
+    EXPECT_THROW(DecodePayload("not-a-graftcode-body"), std::runtime_error);
+    EXPECT_THROW(DecodePayload("graftcode-base64:****"), std::runtime_error);
+    EXPECT_THROW(DecodePayload("graftcode-base64:abc"), std::runtime_error);
+
+    std::vector<unsigned char> oversized(MaxEncodedBodyBytes, 0x11);
+    EXPECT_THROW(
+        EncodePayload(oversized.data(), oversized.size()),
+        std::runtime_error);
+}
+
+TEST(SqsPayload, RejectsGatewayErrorPrefix)
+{
+    EXPECT_NO_THROW(RejectGatewayErrorPayload({}));
+    EXPECT_NO_THROW(RejectGatewayErrorPayload({0x01, 0x02}));
+
+    std::vector<unsigned char> error{255, 'b', 'o', 'o', 'm'};
+    try {
+        RejectGatewayErrorPayload(error);
+        FAIL() << "expected gateway error payload to throw";
+    }
+    catch (const std::runtime_error& ex) {
+        EXPECT_STREQ(ex.what(), "boom");
+    }
+}
+
+TEST(SqsFifo, SetsGroupAndDedupOnlyForFifoQueues)
+{
+    Aws::SQS::Model::SendMessageRequest fifo;
+    ConfigureFifoMessage(
+        fifo,
+        "https://sqs.us-east-1.amazonaws.com/1/orders.fifo",
+        "",
+        "dedup-1");
+    EXPECT_EQ(std::string(fifo.GetMessageGroupId().c_str()), "graftcode");
+    EXPECT_EQ(std::string(fifo.GetMessageDeduplicationId().c_str()), "dedup-1");
+
+    Aws::SQS::Model::SendMessageRequest standard;
+    ConfigureFifoMessage(
+        standard,
+        "https://sqs.us-east-1.amazonaws.com/1/orders",
+        "group",
+        "dedup-1");
+    EXPECT_FALSE(standard.MessageGroupIdHasBeenSet());
+    EXPECT_FALSE(standard.MessageDeduplicationIdHasBeenSet());
 }
 
 TEST(SqsTransport, FactoryCreatesAndDestroysTransport)
 {
-    auto* transport = CreateTransportChannel("", 0, kLocalConfig);
+    auto* transport = CreateTransportChannel(nullptr, 0, kLocalConfig);
     ASSERT_NE(transport, nullptr);
+    EXPECT_EQ(transport->Initialize(1, 2, 0), 0);
+
+    EXPECT_THROW(transport->SendCommand(nullptr, -1), std::invalid_argument);
+    EXPECT_THROW(transport->SendCommand(nullptr, 4), std::invalid_argument);
+
+    unsigned char buffer[4]{};
+    EXPECT_THROW(transport->ReadResponse(nullptr, 4), std::invalid_argument);
+    EXPECT_THROW(transport->ReadResponse(buffer, 4), std::runtime_error);
     DestroyTransportChannel(transport);
+}
+
+TEST(SqsServer, FactoryConfigureAndStop)
+{
+    GraftcodeGateway::IServer* server = CreateServer();
+    ASSERT_NE(server, nullptr);
+    EXPECT_THROW(server->configure(kLocalConfig, nullptr), std::runtime_error);
+    EXPECT_THROW(
+        server->configure(R"({"region":"us-east-1"})", &EchoCallback),
+        std::runtime_error);
+
+    server->configure(kLocalConfig, &EchoCallback);
+    server->stop();
+    DestroyServer(server);
+}
+
+TEST(SqsServer, OneWayServerDoesNotRequireReplyQueue)
+{
+    SqsConfig config;
+    config.requestQueueUrl = "https://example/requests";
+    config.oneWay = true;
+    EXPECT_NO_THROW(ValidateServerConfig(config));
+    EXPECT_NO_THROW(ValidateClientConfig(config));
+}
+
+TEST(SqsServer, StopUnblocksUnavailableEndpoint)
+{
+    const char* config = R"({
+        "region": "us-east-1",
+        "endpointOverride": "http://127.0.0.1:9",
+        "accessKeyId": "test",
+        "secretAccessKey": "test",
+        "requestQueueUrl": "http://127.0.0.1:9/000000000000/graft-requests",
+        "verifySsl": false,
+        "waitTimeSeconds": 1
+    })";
+
+    SqsServer server;
+    server.configure(config, &EchoCallback);
+    std::thread worker([&server]() {
+        server.start();
+    });
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+    const auto started = std::chrono::steady_clock::now();
+    server.stop();
+    worker.join();
+    const auto elapsed = std::chrono::steady_clock::now() - started;
+    EXPECT_LT(elapsed, std::chrono::seconds(15));
 }
 
 TEST(SqsLive, RpcRoundTrip)
@@ -191,11 +440,18 @@ TEST(SqsLive, RpcRoundTrip)
     });
     std::this_thread::sleep_for(std::chrono::seconds(1));
 
+    auto runCall = [&](const std::string& callJson) {
+        SqsClient client(ParseSqsConfigSource(callJson));
+        return client.Call(kPayload.data(), kPayload.size());
+    };
+
     std::vector<unsigned char> response;
+    std::vector<unsigned char> emptyResponse;
     std::exception_ptr callError;
     try {
-        SqsClient client(ParseSqsConfigSource(json));
-        response = client.Call(kPayload.data(), kPayload.size());
+        response = runCall(json);
+        emptyResponse = SqsClient(ParseSqsConfigSource(json))
+            .Call(nullptr, 0);
     }
     catch (...) {
         callError = std::current_exception();
@@ -207,4 +463,41 @@ TEST(SqsLive, RpcRoundTrip)
         std::rethrow_exception(callError);
     }
     EXPECT_EQ(response, kPayload);
+    EXPECT_TRUE(emptyResponse.empty());
+
+    g_oneWaySeen.store(false);
+    const std::string oneWayJson =
+        json.substr(0, json.size() - 1) + ",\"oneWay\":true}";
+    SqsServer oneWayServer;
+    oneWayServer.configure(oneWayJson.c_str(), &RecordOneWayCallback);
+    std::thread oneWayThread([&oneWayServer]() {
+        try {
+            oneWayServer.start();
+        }
+        catch (...) {
+        }
+    });
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+
+    std::vector<unsigned char> oneWayResult;
+    std::exception_ptr oneWayError;
+    try {
+        oneWayResult =
+            SqsClient(ParseSqsConfigSource(oneWayJson))
+                .Call(kPayload.data(), kPayload.size());
+    }
+    catch (...) {
+        oneWayError = std::current_exception();
+    }
+
+    for (int attempt = 0; attempt < 50 && !g_oneWaySeen.load(); ++attempt) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    oneWayServer.stop();
+    oneWayThread.join();
+    if (oneWayError) {
+        std::rethrow_exception(oneWayError);
+    }
+    EXPECT_TRUE(oneWayResult.empty());
+    EXPECT_TRUE(g_oneWaySeen.load());
 }

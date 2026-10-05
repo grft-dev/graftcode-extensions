@@ -16,8 +16,11 @@ target_include_directories(${target_name} PUBLIC
     "${CMAKE_SOURCE_DIR}/GraftcodePluginsInterfaces"
 )
 
+find_package(Threads REQUIRED)
+
 target_link_libraries(${target_name} PUBLIC
     aws-cpp-sdk-sqs
     aws-cpp-sdk-core
     nlohmann_json::nlohmann_json
+    Threads::Threads
 )
