@@ -8,8 +8,10 @@
 #include <mutex>
 #include "TransportRabbitMq.h"
 
+#include <cstdlib>
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 extern "C" Hypertube::Native::Interfaces::ITransport* CreateTransportChannel(
@@ -46,14 +48,67 @@ namespace {
 	};
 }
 
-TEST(RabbitMqTransport, SendCommandRejectsInvalidPayloadArguments) {
-	Graftcode::Plugins::Rabbitmq::TransportRabbitMq transport("127.0.0.1", 5672, kValidClientConfig);
-	for (int i = 0; i < 300; ++i) {
+void ExpectInvalidPayload(
+	Graftcode::Plugins::Rabbitmq::TransportRabbitMq& transport,
+	byte* payload,
+	int32_t length)
+{
+	try {
+		transport.SendCommand(payload, length);
+		FAIL() << "SendCommand should reject invalid payload arguments";
+	}
+	catch (const std::runtime_error& error) {
+		EXPECT_STREQ(error.what(), "invalid RabbitMQ payload");
+	}
+}
 
-		int responseSize = transport.SendCommand(const_cast<byte*>(kSamplePayload.data()), static_cast<int32_t>(kSamplePayload.size()));
-		std::vector<byte> actualResponse(responseSize);
-		transport.ReadResponse(actualResponse.data(), static_cast<int32_t>(actualResponse.size()));
-		EXPECT_EQ(actualResponse.size(), kReadResponsePayload.size());
+TEST(RabbitMqTransport, SendCommandRejectsInvalidPayloadArguments) {
+	Graftcode::Plugins::Rabbitmq::TransportRabbitMq transport(
+		"127.0.0.1",
+		5672,
+		kValidClientConfig);
+
+	byte sample = 0x01;
+	ExpectInvalidPayload(transport, nullptr, -1);
+	ExpectInvalidPayload(transport, nullptr, 0);
+	ExpectInvalidPayload(transport, nullptr, 8);
+	ExpectInvalidPayload(transport, &sample, -5);
+
+	byte buffer[4]{};
+	try {
+		transport.ReadResponse(nullptr, 4);
+		FAIL() << "ReadResponse should reject a null buffer";
+	}
+	catch (const std::runtime_error& error) {
+		EXPECT_STREQ(error.what(), "invalid response buffer");
+	}
+	try {
+		transport.ReadResponse(buffer, 4);
+		FAIL() << "ReadResponse should fail when no response was stored";
+	}
+	catch (const std::runtime_error& error) {
+		EXPECT_STREQ(error.what(), "RabbitMQ response not found for thread");
+	}
+}
+
+TEST(RabbitMqTransport, LiveRoundTrip) {
+	if (std::getenv("RABBITMQ_LIVE") == nullptr) {
+		GTEST_SKIP() << "RABBITMQ_LIVE is not set; broker round-trip is opt-in";
+	}
+
+	Graftcode::Plugins::Rabbitmq::TransportRabbitMq transport(
+		"127.0.0.1",
+		5672,
+		kValidClientConfig);
+	for (int i = 0; i < 300; ++i) {
+		const int responseSize = transport.SendCommand(
+			const_cast<byte*>(kSamplePayload.data()),
+			static_cast<int32_t>(kSamplePayload.size()));
+		std::vector<byte> actualResponse(static_cast<std::size_t>(responseSize));
+		transport.ReadResponse(
+			actualResponse.data(),
+			static_cast<int32_t>(actualResponse.size()));
+		EXPECT_EQ(actualResponse, kReadResponsePayload);
 	}
 }
 
