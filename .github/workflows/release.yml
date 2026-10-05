@@ -175,6 +175,7 @@ jobs:
   approve_release:
     name: Await manual approval
     needs: build
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     environment:
       name: release
