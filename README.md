@@ -1,17 +1,27 @@
 # graftcode-extensions
 
-Official open-source Graftcode Gateway plugins for carrying Graft calls over external communication channels instead of the Gateway's built-in servers. Each plugin implements the same gateway and transport interfaces and is selected purely by configuration, via the Gateway's `--config` option.
+Official open-source Graftcode Gateway plugins. Each plugin carries Graft calls over an external channel instead of the Gateway's built-in servers. The Gateway and the calling runtime select a plugin by configuration; they do not share code.
 
-## Plugins
+## Pick a plugin
 
-| Plugin | Channel |
-|--------|---------|
-| [rabbitmq](rabbitmq/) | RabbitMQ (AMQP 0-9-1), request/reply |
-| [servicebus](servicebus/) | Azure Service Bus (AMQP 1.0), request/reply and one-way |
-| [kafka](kafka/) | Apache Kafka, request/reply (correlation-id) |
-| [sqs](sqs/) | Amazon SQS, request/reply and one-way |
-| [observability/opentelemetry](observability/opentelemetry/) | OpenTelemetry / Azure Application Insights connector |
+| Plugin | Channel | Modes | Local setup | Docs |
+|--------|---------|-------|-------------|------|
+| [rabbitmq](rabbitmq/Readme.md) | RabbitMQ (AMQP 0-9-1) | request/reply | Docker image in `rabbitmq/` | [Readme](rabbitmq/Readme.md) |
+| [servicebus](servicebus/Readme.md) | Azure Service Bus (AMQP 1.0) | request/reply and one-way | Service Bus emulator | [Readme](servicebus/Readme.md) |
+| [kafka](kafka/Readme.md) | Apache Kafka | request/reply | [samples/kafka](samples/kafka/README.md) | [Readme](kafka/Readme.md) |
+| [sqs](sqs/Readme.md) | Amazon SQS | request/reply and one-way | [samples/sqs](samples/sqs/README.md) (LocalStack) | [Readme](sqs/Readme.md) |
 
-Each plugin has its own README with build and configuration steps. For how the Gateway loads a plugin, see the "Plugin server config" section of the [Graftcode Gateway](https://github.com/grft-dev/graftcode-gateway) README.
+OpenTelemetry / Application Insights lives under [observability/opentelemetry](observability/opentelemetry/dotnet/Graft.Netcore.Telemetry.AppInsightsConnector/README.md). It is not a transport plugin.
+
+Use RabbitMQ or Kafka when you already run that broker. Use Service Bus or SQS when the deployment is already on Azure or AWS. SQS needs one reply queue per client process; Service Bus can share one session-enabled reply queue.
+
+## Use a plugin
+
+1. Build the plugin (see its Readme). The artifact is a shared library: `SqsPlugin.dll` on Windows, or `libSqsPlugin.so` / `.dylib` on Linux and macOS.
+2. Put `gg`, the hosted module, the plugin library, and any runtime DLLs in one folder. `name` in the config is the library file name without the extension (`libSqsPlugin` when the file is `libSqsPlugin.so`).
+3. Start the Gateway with `--config`. A verified SQS layout is in [samples/sqs](samples/sqs/README.md): `gg netapp.dll --config sqsplugin.json`.
+4. Open `http://localhost:81/GV`, install the generated package, and call `GraftConfig.SetConfig` with the same channel settings. `host` there is the Gateway HTTP address, not the broker.
+
+How the Gateway loads a plugin is described in the "Plugin server config" section of the [Graftcode Gateway](https://github.com/grft-dev/graftcode-gateway) README.
 
 Part of the [Graftcode](https://github.com/grft-dev/graftcode) project.

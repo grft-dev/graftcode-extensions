@@ -1,68 +1,57 @@
-# RabbitMQ Plugin Build (CMake)
+# RabbitMQ Plugin
 
-## 1) Clone repository
+This plugin carries Graftcode Gateway calls over RabbitMQ (AMQP 0-9-1). It implements `Hypertube::Native::Interfaces::ITransport` and `GraftcodeGateway::IServer`, and exports `CreateTransportChannel` / `DestroyTransportChannel` and `CreateServer` / `DestroyServer`.
+
+It is written in C++. CMake FetchContent builds [AMQP-CPP](https://github.com/CopernicaMarketingSoftware/AMQP-CPP) `v4.3.27` and nlohmann/json `v3.12.0` into the plugin. There is no vcpkg manifest.
+
+Request/reply uses AMQP properties:
+
+- The client sets `correlation-id` and `reply-to` (the configured reply queue).
+- The gateway publishes the response to `reply-to` and echoes `correlation-id`.
+- A client that receives a different correlation id rejects the message and requeues it, so several clients can share one reply queue.
+
+Queues must already exist. There is no one-way mode. `user` is required. Set `port` to `5672` for the Docker image below; an omitted port is `0` and does not connect. An empty `vhost` means `/`. `rpcTimeoutMs` defaults to `30000` on the client.
+
+## Build
 
 ```bash
-git clone https://github.com/grft-dev/graftcode-plugins.git
-cd graftcode-plugins/rabbitmq
-```
+git clone https://github.com/grft-dev/graftcode-extensions.git
+cd graftcode-extensions/rabbitmq
 
-## 2) Configure with CMake
-
-```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-```
-
-## 3) Build
-
-```bash
 cmake --build build --config Release
 ```
 
-As a result, you will receive:
-- `rabbitmq/build/RabbitmqPlugin/libRabbitmqPlugin.dll`
-- or `rabbitmq/build/RabbitmqPlugin/RabbitmqPlugin.dll`
+Output:
 
-If the generated library is `libRabbitmqPlugin.dll`, use plugin name: `libRabbitmqPlugin`.
+- Windows: `rabbitmq/build/RabbitmqPlugin/RabbitmqPlugin.dll` — config `"name": "RabbitmqPlugin"`
+- Linux/macOS: `rabbitmq/build/RabbitmqPlugin/libRabbitmqPlugin.so` or `.dylib` — config `"name": "libRabbitmqPlugin"`
 
-## 4) Download GG
+Download `gg` from https://github.com/grft-dev/graftcode-gateway/releases/.
 
-Download `gg` from:
-- https://github.com/grft-dev/graftcode-gateway/releases/
+## Local broker
 
-## 5) Run RabbitMQ in Docker
-
-Build image from `rabbitmq/Dockerfile`:
+`rabbitmq/Dockerfile` is `rabbitmq:4-management` (AMQP `5672`, management UI `15672`).
 
 ```bash
 docker build -t graftcode-rabbitmq .
-```
-
-Run container:
-
-```bash
 docker run -d --name graftcode-rabbitmq -p 5672:5672 -p 15672:15672 graftcode-rabbitmq
 ```
 
-## 6) Create queues `myqueue` and `myqueue.reply`
+Create `myqueue` and `myqueue.reply`.
 
-Option A (RabbitMQ UI):
-- Open `http://localhost:15672`
-- Log in with `guest` / `guest`
-- Go to **Queues and Streams** -> **Add a new queue**
-- Set queue name to `myqueue` and click **Add queue**
-- Repeat and create queue `myqueue.reply`
+Management UI at `http://localhost:15672` (`guest` / `guest`): **Queues and Streams** → **Add a new queue**.
 
-Option B (command line):
+Or:
 
 ```bash
 docker exec -it graftcode-rabbitmq rabbitmqadmin declare queue name=myqueue durable=true
 docker exec -it graftcode-rabbitmq rabbitmqadmin declare queue name=myqueue.reply durable=true
 ```
 
-## 7) Run GG with sample library
+## Gateway
 
-In your sample folder (for example `C:\DEV\Testing\20260610rabbitmq\samplelibrary`), create `pluginConfig.json`:
+`pluginConfig.json`:
 
 ```json
 {
@@ -78,32 +67,15 @@ In your sample folder (for example `C:\DEV\Testing\20260610rabbitmq\samplelibrar
 }
 ```
 
-If you built `libRabbitmqPlugin.dll`, set:
-
-```json
-"name": "libRabbitmqPlugin"
-```
-
-Then run:
-
 ```powershell
 ./gg .\PhysicsCalculator.dll --config .\pluginConfig.json
 ```
 
-## 8) Get installation command
+Open `http://localhost:81/GV` and install the generated package.
 
-Visit `http://localhost:81/GV`, select your package manager, and copy the generated installation command.
+## Client
 
-Example for .NET:
-
-```powershell
-dotnet new console
-dotnet add package -s https://grft.dev/019cf6aa-e2e0-74e7-a2b0-be30db97ccb5__graftcode graft.nuget.physicscalculator --version 1.0.0
-```
-
-## 9) Configure Graft after installation
-
-Use this configuration:
+`host` inside `configurations` is the Gateway address. Broker host and port stay in `plugin`.
 
 ```csharp
 string configSource =
@@ -112,10 +84,12 @@ string configSource =
   "configurations": {
     "graft.nuget.PhysicsCalculator": {
       "runtime": "netcore",
-      "host": "localhost:5672",
+      "host": "localhost:80",
       "stateless": true,
       "plugin": {
         "name": "RabbitmqPlugin",
+        "host": "localhost",
+        "port": 5672,
         "queue": "myqueue",
         "replyQueue": "myqueue.reply",
         "user": "guest",
@@ -131,3 +105,16 @@ string configSource =
 graft.nuget.PhysicsCalculator.GraftConfig.SetConfig(configSource);
 ```
 
+## Configuration reference
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | yes | Plugin library name without extension. |
+| `host` | yes | Broker hostname. |
+| `port` | yes | AMQP port. `5672` for the Docker image. |
+| `queue` | yes | Request queue. |
+| `replyQueue` | yes (client) | Queue named by `reply-to`. The gateway reads it from the message. |
+| `user` | yes | AMQP username. |
+| `password` | no | AMQP password. |
+| `vhost` | no | Virtual host. Empty means `/`. |
+| `rpcTimeoutMs` | no | Client wait for a matching reply. Default `30000`. |

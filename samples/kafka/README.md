@@ -1,6 +1,6 @@
 # Kafka sample configs
 
-Local broker + UI and Graftcode plugin connection files.
+Local broker + UI and Graftcode plugin connection files. Plugin build, headers, and the configuration table are in [kafka/Readme.md](../../kafka/Readme.md).
 
 ## Start Kafka
 
