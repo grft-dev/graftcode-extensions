@@ -1,0 +1,17 @@
+# Local Amazon SQS (LocalStack) for Graftcode SqsPlugin samples.
+services:
+  localstack:
+    image: localstack/localstack:4.8
+    container_name: graftcode-sqs
+    ports:
+      - "4566:4566"
+    environment:
+      SERVICES: sqs
+      AWS_DEFAULT_REGION: us-east-1
+      DEBUG: 0
+    volumes:
+      - localstack-data:/var/lib/localstack
+      - ./scripts/init-queues.sh:/etc/localstack/init/ready.d/init-queues.sh
+
+volumes:
+  localstack-data:

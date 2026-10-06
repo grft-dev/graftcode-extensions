@@ -1,82 +1,59 @@
-# Kafka Plugin Build (CMake)
+# Kafka Plugin
 
-This plugin is the Apache Kafka counterpart of the RabbitMQ / Azure Service Bus
-plugins. It implements the same Graftcode plugin interfaces
-(`Hypertube::Native::Interfaces::ITransport` for the calling runtime and
-`GraftcodeGateway::IServer` for the gateway) and exposes the same exported
-factory symbols (`CreateTransportChannel` / `DestroyTransportChannel` and
-`CreateServer` / `DestroyServer`).
+This plugin carries Graftcode Gateway calls over Apache Kafka. It implements `Hypertube::Native::Interfaces::ITransport` and `GraftcodeGateway::IServer`, and exports `CreateTransportChannel` / `DestroyTransportChannel` and `CreateServer` / `DestroyServer`.
 
-It is written in C++ and talks to Kafka using **librdkafka** (`rdkafka++`),
-acquired through CMake `FetchContent` (same pattern as the RabbitMQ plugin).
+It is written in C++. CMake FetchContent builds nlohmann/json `v3.12.0` and librdkafka `v2.8.0` (static `rdkafka++`). There is no vcpkg manifest. The first configure needs network access for those downloads.
 
-## RPC model
+Kafka has no native request/reply. The plugin uses headers:
 
-Kafka has no native request/reply. This plugin mirrors the Service Bus / AMQP
-pattern with message headers:
+1. The client produces to `requestTopic` with `correlation-id` and `reply-to`.
+2. The gateway consumes `requestTopic`, runs `processMessage`, and produces the response to `reply-to` (or the configured `replyTopic` when the header is absent), echoing `correlation-id`.
+3. The client consumes its reply topic until that correlation id arrives, or `rpcTimeoutMs` elapses.
 
-1. **Client** produces to `requestTopic` with headers:
-   - `correlation-id` — UUID per call
-   - `reply-to` — reply topic the server should use
-2. **Server** (GG plugin) consumes `requestTopic`, runs `processMessage`, then
-   produces to the `reply-to` topic (falling back to configured `replyTopic`)
-   echoing the same `correlation-id`.
-3. **Client** consumes `replyTopic` until a message with a matching
-   `correlation-id` arrives, or `rpcTimeoutMs` elapses.
+Each client appends its own instance id to `groupId`, so several clients can share one reply topic. Each consumer group receives the replies and keeps only its correlation id. The gateway uses `groupId` as given (default `graft-gateway`). There is no one-way mode.
 
-## 1) Clone repository
+`brokers` defaults to `localhost:9092`, `requestTopic` to `graft.requests`, `replyTopic` to `graft.replies`, and `rpcTimeoutMs` to `30000`. `queue` is an alias of `requestTopic`, `replyQueue` of `replyTopic`, and `host` of `brokers`.
+
+## Build
 
 ```bash
 git clone https://github.com/grft-dev/graftcode-extensions.git
 cd graftcode-extensions/kafka
-```
 
-## 2) Configure with CMake
-
-```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-```
-
-## 3) Build
-
-```bash
 cmake --build build --config Release
 ```
 
-CMake downloads **nlohmann/json** and **librdkafka** (`v2.8.0`) via FetchContent
-and links a static `rdkafka++` into the shared plugin.
+Output:
 
-As a result, you will receive:
-- `kafka/build/KafkaPlugin/KafkaPlugin.dll` (Windows)
-- `kafka/build/KafkaPlugin/libKafkaPlugin.so` / `.dylib` (Linux / macOS)
+- Windows: `kafka/build/KafkaPlugin/KafkaPlugin.dll` — config `"name": "KafkaPlugin"`
+- Linux/macOS: `kafka/build/KafkaPlugin/libKafkaPlugin.so` or `.dylib` — config `"name": "libKafkaPlugin"`
 
-If the generated library is `libKafkaPlugin.*`, use plugin name
-`libKafkaPlugin` in config.
+Download `gg` from https://github.com/grft-dev/graftcode-gateway/releases/.
 
-## 4) Download GG
+## Local broker
 
-Download `gg` from:
-https://github.com/grft-dev/graftcode-gateway/releases/
+Compose files are in [`samples/kafka`](../samples/kafka/README.md), not in this directory.
 
-## 5) Run a local broker
-
-### Apache Kafka (KRaft)
+Apache Kafka (KRaft), broker `localhost:9092`, UI `http://localhost:8080`:
 
 ```bash
-docker compose -f docker-compose.yml up -d
+cd ../samples/kafka
+docker compose up -d
 ./scripts/create-topics.sh
 ```
 
-### Redpanda (lighter alternative)
+Redpanda, broker `localhost:19092`:
 
 ```bash
 docker compose -f docker-compose.redpanda.yml up -d
-# brokers: localhost:19092
 ```
 
-## 6) Run GG with sample library
+Set `"brokers": "localhost:19092"` when using Redpanda.
 
-Create `pluginConfig.json` (see also the example in this folder):
+## Gateway
+
+`pluginConfig.json` (also [`samples/kafka/pluginConfig.gateway.json`](../samples/kafka/pluginConfig.gateway.json)):
 
 ```json
 {
@@ -89,18 +66,53 @@ Create `pluginConfig.json` (see also the example in this folder):
 }
 ```
 
-Then run:
-
 ```powershell
 ./gg .\PhysicsCalculator.dll --config .\pluginConfig.json
+```
+
+Open `http://localhost:81/GV` and install the generated package.
+
+## Client
+
+A full example is [`samples/kafka/graftConfig.kafka.example.json`](../samples/kafka/graftConfig.kafka.example.json). Use a client `groupId` such as `graft-client`; the plugin still adds a unique suffix. Kafka bootstrap servers belong in `plugin.brokers`. When the runtime also needs the Gateway HTTP address, set `"host": "localhost:80"` next to `runtime`, as in the [SQS client config](../samples/sqs/graftConfig.sqs.example.json).
+
+```csharp
+string configSource =
+"""
+{
+  "configurations": {
+    "graft.nuget.PhysicsCalculator": {
+      "runtime": "netcore",
+      "stateless": true,
+      "plugin": {
+        "name": "KafkaPlugin",
+        "brokers": "localhost:9092",
+        "requestTopic": "graft.requests",
+        "replyTopic": "graft.replies",
+        "groupId": "graft-client",
+        "rpcTimeoutMs": 30000
+      }
+    }
+  }
+}
+""";
+
+graft.nuget.PhysicsCalculator.GraftConfig.SetConfig(configSource);
 ```
 
 ## Configuration reference
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `brokers` / `host` | yes | Kafka bootstrap servers |
-| `requestTopic` / `queue` | yes | Topic for requests |
-| `replyTopic` / `replyQueue` | yes (RPC client) | Topic for replies |
-| `groupId` | no | Consumer group base name |
-| `rpcTimeoutMs` | no | Request/response timeout (default 30000) |
+| `name` | yes | Plugin library name without extension. |
+| `brokers` / `host` | no | Bootstrap servers. Default `localhost:9092`. |
+| `requestTopic` / `queue` | no | Request topic. Default `graft.requests`. |
+| `replyTopic` / `replyQueue` | no | Reply topic. Default `graft.replies`. |
+| `groupId` | no | Gateway consumer group, or the prefix of each client's unique group. |
+| `rpcTimeoutMs` | no | Client wait for a matching reply. Default `30000`. |
+| `securityProtocol` | no | librdkafka `security.protocol`, for example `SASL_SSL` or `SSL`. |
+| `saslMechanism` | no | For example `PLAIN` or `SCRAM-SHA-512`. |
+| `saslUsername`, `saslPassword` | no | SASL credentials. |
+| `sslCaLocation` | no | CA bundle path for TLS. |
+
+Empty security fields leave librdkafka defaults (plaintext for the local compose files).
