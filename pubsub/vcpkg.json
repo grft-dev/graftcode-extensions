@@ -1,0 +1,11 @@
+{
+  "name": "graftcode-pubsub-plugin",
+  "version": "1.0.0",
+  "description": "Graftcode Google Cloud Pub/Sub transport/server plugin. Talks to the Pub/Sub JSON API with libcurl.",
+  "builtin-baseline": "1460b31b08c42cc2e9ac2c79f45ec8707e2675e2",
+  "dependencies": [
+    "curl",
+    "openssl",
+    "nlohmann-json"
+  ]
+}

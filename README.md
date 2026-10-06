@@ -10,10 +10,11 @@ Official open-source Graftcode Gateway plugins. Each plugin carries Graft calls 
 | [servicebus](servicebus/Readme.md) | Azure Service Bus (AMQP 1.0) | request/reply and one-way | Service Bus emulator | [Readme](servicebus/Readme.md) |
 | [kafka](kafka/Readme.md) | Apache Kafka | request/reply | [samples/kafka](samples/kafka/README.md) | [Readme](kafka/Readme.md) |
 | [sqs](sqs/Readme.md) | Amazon SQS | request/reply and one-way | [samples/sqs](samples/sqs/README.md) (LocalStack) | [Readme](sqs/Readme.md) |
+| [pubsub](pubsub/Readme.md) | Google Cloud Pub/Sub | request/reply and one-way | [samples/pubsub](samples/pubsub/README.md) (Pub/Sub emulator) | [Readme](pubsub/Readme.md) |
 
 OpenTelemetry / Application Insights lives under [observability/opentelemetry](observability/opentelemetry/dotnet/Graft.Netcore.Telemetry.AppInsightsConnector/README.md). It is not a transport plugin.
 
-Use RabbitMQ or Kafka when you already run that broker. Use Service Bus or SQS when the deployment is already on Azure or AWS. SQS needs one reply queue per client process; Service Bus can share one session-enabled reply queue.
+Use RabbitMQ or Kafka when you already run that broker. Use Service Bus or SQS when the deployment is already on Azure or AWS. Use Pub/Sub when the deployment is already on Google Cloud. SQS and Pub/Sub each need one reply destination per client process; Service Bus can share one session-enabled reply queue.
 
 ## Use a plugin
 

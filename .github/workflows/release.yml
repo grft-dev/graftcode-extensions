@@ -10,6 +10,7 @@ on:
       - "servicebus/**"
       - "kafka/**"
       - "sqs/**"
+      - "pubsub/**"
       - ".github/workflows/release.yml"
   pull_request:
     branches: [ "main" ]
@@ -18,6 +19,7 @@ on:
       - "servicebus/**"
       - "kafka/**"
       - "sqs/**"
+      - "pubsub/**"
       - ".github/workflows/release.yml"
   workflow_dispatch:
     inputs:
@@ -38,7 +40,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        plugin: [rabbitmq, servicebus, kafka, sqs]
+        plugin: [rabbitmq, servicebus, kafka, sqs, pubsub]
         platform: [windows-latest, windows-11-arm, ubuntu-22.04, ubuntu-22.04-arm, macos-26-intel, macos-14]
 
     steps:
@@ -96,6 +98,18 @@ jobs:
             sqs)
               echo "DIRECTORY=sqs" >> "$GITHUB_ENV"
               echo "ARTIFACT_PATH=sqs/build/SqsPlugin" >> "$GITHUB_ENV"
+              echo "CONFIGURE_ARGS=-DCMAKE_TOOLCHAIN_FILE=${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake" >> "$GITHUB_ENV"
+              if [ "${{ runner.os }}" = "Linux" ]; then
+                echo "INSTALL_PACKAGES=build-essential cmake git ninja-build pkg-config" >> "$GITHUB_ENV"
+              elif [ "${{ runner.os }}" = "macOS" ]; then
+                echo "INSTALL_PACKAGES=cmake ninja pkg-config" >> "$GITHUB_ENV"
+              else
+                echo "INSTALL_PACKAGES=cmake" >> "$GITHUB_ENV"
+              fi
+              ;;
+            pubsub)
+              echo "DIRECTORY=pubsub" >> "$GITHUB_ENV"
+              echo "ARTIFACT_PATH=pubsub/build/PubSubPlugin" >> "$GITHUB_ENV"
               echo "CONFIGURE_ARGS=-DCMAKE_TOOLCHAIN_FILE=${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake" >> "$GITHUB_ENV"
               if [ "${{ runner.os }}" = "Linux" ]; then
                 echo "INSTALL_PACKAGES=build-essential cmake git ninja-build pkg-config" >> "$GITHUB_ENV"

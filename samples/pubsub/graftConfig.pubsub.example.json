@@ -1,0 +1,20 @@
+{
+  "configurations": {
+    "graft.nuget.netapp": {
+      "runtime": "netcore",
+      "host": "localhost:80",
+      "stateless": true,
+      "plugin": {
+        "name": "PubSubPlugin",
+        "projectId": "graftcode-local",
+        "emulatorHost": "localhost:8085",
+        "requestTopic": "graft-requests",
+        "replyTopic": "graft-replies",
+        "rpcTimeoutMs": 30000,
+        "ackDeadlineSeconds": 60,
+        "autoCreate": true,
+        "verifySsl": false
+      }
+    }
+  }
+}
