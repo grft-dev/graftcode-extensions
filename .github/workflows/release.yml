@@ -126,10 +126,10 @@ jobs:
               echo "ARTIFACT_PATH=kafka/build/KafkaPlugin" >> "$GITHUB_ENV"
               if [ "${{ runner.os }}" = "Linux" ]; then
                 echo "CONFIGURE_ARGS=" >> "$GITHUB_ENV"
-                echo "INSTALL_PACKAGES=build-essential cmake git libssl-dev libsasl2-dev zlib1g-dev libzstd-dev patchelf" >> "$GITHUB_ENV"
+                echo "INSTALL_PACKAGES=build-essential cmake git libssl-dev libsasl2-dev patchelf" >> "$GITHUB_ENV"
               elif [ "${{ runner.os }}" = "macOS" ]; then
                 echo "CONFIGURE_ARGS=" >> "$GITHUB_ENV"
-                echo "INSTALL_PACKAGES=cmake openssl zstd" >> "$GITHUB_ENV"
+                echo "INSTALL_PACKAGES=cmake openssl" >> "$GITHUB_ENV"
               else
                 # Static OpenSSL/zlib built with /MT. The Program Files OpenSSL is /MD.
                 echo "CONFIGURE_ARGS=-DCMAKE_TOOLCHAIN_FILE=${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake" >> "$GITHUB_ENV"

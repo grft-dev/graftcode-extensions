@@ -1,10 +1,9 @@
 {
   "name": "graftcode-kafka-plugin",
   "version": "1.0.0",
-  "description": "Static OpenSSL and zlib for the Kafka plugin on Windows (/MT). Unix builds use the system static archives instead.",
+  "description": "Static OpenSSL for the Kafka plugin on Windows (/MT). zlib and zstd are FetchContent static libraries.",
   "builtin-baseline": "1460b31b08c42cc2e9ac2c79f45ec8707e2675e2",
   "dependencies": [
-    "openssl",
-    "zlib"
+    "openssl"
   ]
 }
