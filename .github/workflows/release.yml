@@ -173,10 +173,27 @@ jobs:
         run: |
           ctest --test-dir build -C Release --output-on-failure --timeout 180
 
+      # Publish a flat archive of runtime shared libraries only. The MSVC
+      # target directory also holds CMake/project files and import libraries.
       - name: Package (${{ matrix.plugin }})
+        shell: bash
         run: |
-          mkdir -p release-payloads
-          tar -czf "release-payloads/${{ env.PLUGIN_NAME }}-${{ env.PACKAGE_SUFFIX }}.tar.gz" -C "${{ env.ARTIFACT_PATH }}" .
+          set -euo pipefail
+          if command -v python3 >/dev/null 2>&1; then
+            PY=(python3)
+          elif command -v python >/dev/null 2>&1; then
+            PY=(python)
+          elif command -v py >/dev/null 2>&1; then
+            PY=(py -3)
+          else
+            echo "python3 is required to package shared libraries" >&2
+            exit 1
+          fi
+          "${PY[@]}" .github/scripts/package_shared_libs.py \
+            --artifact-path "${ARTIFACT_PATH}" \
+            --plugin-stem "$(basename "${ARTIFACT_PATH}")" \
+            --staging package-staging \
+            --archive "release-payloads/${PLUGIN_NAME}-${PACKAGE_SUFFIX}.tar.gz"
 
       - name: Upload artifact (${{ matrix.plugin }})
         uses: actions/upload-artifact@v6

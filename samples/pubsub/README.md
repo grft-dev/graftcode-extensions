@@ -29,7 +29,7 @@ Colocate these next to each other:
 - `gg.exe`
 - `netapp.dll` (the hosted module)
 - `PubSubPlugin.dll`
-- the libcurl and OpenSSL runtime DLLs from `pubsub/build/vcpkg_installed/<triplet>/bin` (typically `libcurl.dll`, `libssl-3-x64.dll`, `libcrypto-3-x64.dll`, and `zlib1.dll`)
+- the libcurl, libcrypto, and zlib runtime DLLs from `pubsub/build/vcpkg_installed/<triplet>/bin` (typically `libcurl.dll`, `libcrypto-3-x64.dll`, and `z.dll`). Windows curl is built with Schannel, so `libssl-3-x64.dll` is not loaded.
 
 Copy `pluginConfig.gateway.json` to that folder as `pubsubplugin.json` and run:
 

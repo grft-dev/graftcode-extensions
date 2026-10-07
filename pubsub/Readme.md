@@ -52,7 +52,7 @@ Output:
 - Windows: `pubsub/build/PubSubPlugin/PubSubPlugin.dll` — config `"name": "PubSubPlugin"`
 - Linux/macOS: `pubsub/build/PubSubPlugin/libPubSubPlugin.so` or `.dylib` — config `"name": "libPubSubPlugin"`
 
-On Windows, copy `PubSubPlugin.dll` and the vcpkg runtime DLLs (libcurl, libssl, libcrypto, zlib) from `build/vcpkg_installed/<triplet>/bin` next to `gg.exe`. The loader does not search the build tree.
+On Windows, copy `PubSubPlugin.dll` and the vcpkg runtime DLLs next to `gg.exe`: `libcurl.dll`, the libcrypto DLL (for example `libcrypto-3-x64.dll`), and the zlib DLL (`z.dll` or `zlib1.dll`). vcpkg builds curl against Schannel on Windows, so HTTPS uses the Windows certificate store and `libssl` is not a runtime dependency. `libcrypto` signs the service-account JWT. The loader does not search the build tree.
 
 Hermetic tests always run. The round-trip test runs only when `PUBSUB_EMULATOR_HOST` or `PUBSUB_LIVE` is set.
 
@@ -81,7 +81,7 @@ This layout is the same shape as the SQS sample. Put these files in one folder:
 - `gg.exe`
 - the hosted module, for example `netapp.dll`
 - `PubSubPlugin.dll`
-- the libcurl and OpenSSL DLLs from the vcpkg `bin` directory
+- the libcurl, libcrypto, and zlib DLLs from the vcpkg `bin` directory (`libssl` is not required on Windows; curl uses Schannel)
 
 `pubsubplugin.json` (same contents as [`samples/pubsub/pluginConfig.gateway.json`](../samples/pubsub/pluginConfig.gateway.json)):
 
