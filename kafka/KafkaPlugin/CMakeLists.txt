@@ -80,33 +80,15 @@ if(UNIX AND NOT WIN32)
 endif()
 
 # librdkafka install(EXPORT) rejects zlibstatic because that target is not in
-# its export set. Drop EXPORT while configuring librdkafka; the plugin does not
-# install those targets.
-function(install)
-    if(ARGV0 STREQUAL "EXPORT")
-        return()
-    endif()
-    set(_graftcode_skip_next OFF)
-    set(_graftcode_kept "")
-    foreach(_graftcode_arg IN LISTS ARGV)
-        if(_graftcode_skip_next)
-            set(_graftcode_skip_next OFF)
-            continue()
-        endif()
-        if(_graftcode_arg STREQUAL "EXPORT")
-            set(_graftcode_skip_next ON)
-            continue()
-        endif()
-        list(APPEND _graftcode_kept "${_graftcode_arg}")
-    endforeach()
-    _install(${_graftcode_kept})
-endfunction()
-
+# its export set. Strip the export in the fetched sources. Do not wrap
+# install(): re-listing its arguments splits install(CODE) on semicolons and
+# writes a cmake_install.cmake that macOS cannot parse.
 FetchContent_Declare(
     librdkafka
     GIT_REPOSITORY https://github.com/confluentinc/librdkafka.git
     GIT_TAG v2.8.0
     GIT_SHALLOW TRUE
+    PATCH_COMMAND ${CMAKE_COMMAND} -P "${CMAKE_SOURCE_DIR}/../cmake/skip-rdkafka-export.cmake"
 )
 FetchContent_MakeAvailable(librdkafka)
 
