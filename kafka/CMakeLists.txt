@@ -20,3 +20,6 @@ endif()
 
 add_subdirectory("KafkaPlugin")
 add_subdirectory("KafkaPluginTest")
+
+include("${CMAKE_CURRENT_SOURCE_DIR}/../cmake/InstallPluginRuntime.cmake")
+graftcode_install_plugin(KafkaPlugin)

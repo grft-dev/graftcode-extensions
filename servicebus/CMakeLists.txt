@@ -22,3 +22,6 @@ endif()
 
 add_subdirectory ("ServiceBusPlugin")
 add_subdirectory ("ServiceBusPluginTest")
+
+include("${CMAKE_CURRENT_SOURCE_DIR}/../cmake/InstallPluginRuntime.cmake")
+graftcode_install_plugin(ServiceBusPlugin)

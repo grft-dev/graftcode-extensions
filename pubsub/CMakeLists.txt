@@ -20,3 +20,6 @@ endif()
 
 add_subdirectory("PubSubPlugin")
 add_subdirectory("PubSubPluginTest")
+
+include("${CMAKE_CURRENT_SOURCE_DIR}/../cmake/InstallPluginRuntime.cmake")
+graftcode_install_plugin(PubSubPlugin)

@@ -28,3 +28,6 @@ endif()
 add_subdirectory ("RabbitmqPlugin")
 add_subdirectory ("RabbitmqPluginTest")
 
+include("${CMAKE_CURRENT_SOURCE_DIR}/../cmake/InstallPluginRuntime.cmake")
+graftcode_install_plugin(RabbitmqPlugin)
+
