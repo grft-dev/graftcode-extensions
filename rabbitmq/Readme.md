@@ -4,6 +4,8 @@ This plugin carries Graftcode Gateway calls over RabbitMQ (AMQP 0-9-1). It imple
 
 It is written in C++. CMake FetchContent builds [AMQP-CPP](https://github.com/CopernicaMarketingSoftware/AMQP-CPP) `v4.3.27` and nlohmann/json `v3.12.0` into the plugin. There is no vcpkg manifest.
 
+The release archive contains only the plugin shared library (`RabbitmqPlugin.dll`, `libRabbitmqPlugin.so`, or `libRabbitmqPlugin.dylib`). AMQP-CPP is linked into that library. On Windows the MSVC CRT is static (`/MT`), so the VC++ Redistributable is not required. Clients do not install OpenSSL, curl, zlib, or another runtime for this plugin.
+
 Request/reply uses AMQP properties:
 
 - The client sets `correlation-id` and `reply-to` (the configured reply queue).

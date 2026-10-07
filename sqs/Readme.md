@@ -2,7 +2,9 @@
 
 This plugin carries Graftcode Gateway calls over Amazon Simple Queue Service. It implements `Hypertube::Native::Interfaces::ITransport` and `GraftcodeGateway::IServer`, and exports `CreateTransportChannel` / `DestroyTransportChannel` and `CreateServer` / `DestroyServer`.
 
-It is written in C++ and uses the AWS SDK for C++ (`aws-sdk-cpp[sqs]`) plus `nlohmann-json`, both from vcpkg.
+It is written in C++ and uses the AWS SDK for C++ (`aws-sdk-cpp[sqs]`) plus `nlohmann-json`, both from vcpkg. Both are linked into the plugin.
+
+The release archive contains only the plugin shared library (`SqsPlugin.dll`, `libSqsPlugin.so`, or `libSqsPlugin.dylib`). On Windows the build uses `/MT` and the `*-windows-static` vcpkg triplet, so the VC++ Redistributable is not required. Clients do not install the AWS SDK, OpenSSL, curl, or zlib separately.
 
 Binary Graft payloads are Base64-encoded in the SQS message body with the prefix `graftcode-base64:`. RPC metadata is message attributes:
 
@@ -38,7 +40,7 @@ Output:
 - Windows: `sqs/build/SqsPlugin/SqsPlugin.dll` — config `"name": "SqsPlugin"`
 - Linux/macOS: `sqs/build/SqsPlugin/libSqsPlugin.so` or `.dylib` — config `"name": "libSqsPlugin"`
 
-On Windows, copy `SqsPlugin.dll` next to `gg.exe`. The AWS SDK and the VC++ runtime are linked into that DLL (`/MT` and the `*-windows-static` vcpkg triplet), so the VC++ Redistributable is not required.
+On Windows, copy `SqsPlugin.dll` next to `gg.exe`. Nothing else from this plugin is required.
 
 Download `gg` from https://github.com/grft-dev/graftcode-gateway/releases/.
 
@@ -72,7 +74,6 @@ This layout was run locally against LocalStack. Put these files in one folder:
 - `gg.exe`
 - the hosted module, for example `netapp.dll`
 - `SqsPlugin.dll`
-- the AWS SDK runtime DLLs from the plugin build
 
 `sqsplugin.json` (same contents as [`samples/sqs/pluginConfig.gateway.json`](../samples/sqs/pluginConfig.gateway.json)):
 

@@ -8,10 +8,7 @@ library plus, on Linux only, Cyrus SASL:
 - OpenSSL is static. Unix builds use the distro or Homebrew `libssl.a` / `libcrypto.a` (those archives are PIC). Windows uses vcpkg `*-windows-static` from `kafka/vcpkg.json` because the OpenSSL under `Program Files` is `/MD`. Pass `-DCMAKE_TOOLCHAIN_FILE=<vcpkg>/scripts/buildsystems/vcpkg.cmake` on Windows.
 - librdkafka's libcurl OIDC helper is off.
 
-Shared libraries that stay in the Linux archive, and why:
-
-- `libsasl2.so` loads SASL mechanism modules at runtime. A static `libsasl2.a` would still need those modules from the host, so the shared library stays.
-- `libcrypto.so.3` is imported by that `libsasl2.so`, not by the plugin. The plugin's own TLS uses the static OpenSSL, and `--exclude-libs` keeps those symbols inside the plugin.
+The Linux archive also contains `libsasl2.so.2` and `libsasl2.so.2.0.25`. Cyrus SASL loads mechanism modules at runtime, so that library stays shared. On Ubuntu 22.04 it does not import `libcrypto`; if the build machine's `libsasl2` does, the package step copies `libcrypto.so.3` as well. The plugin's own TLS uses the static OpenSSL, and `--exclude-libs` keeps those symbols inside the plugin.
 
 Windows SASL is `secur32` (system). macOS builds that do not find Cyrus SASL omit it. The MSVC CRT is `/MT`, so the VC++ Redistributable is not required.
 

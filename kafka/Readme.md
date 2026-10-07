@@ -2,7 +2,9 @@
 
 This plugin carries Graftcode Gateway calls over Apache Kafka. It implements `Hypertube::Native::Interfaces::ITransport` and `GraftcodeGateway::IServer`, and exports `CreateTransportChannel` / `DestroyTransportChannel` and `CreateServer` / `DestroyServer`.
 
-It is written in C++. CMake FetchContent builds nlohmann/json `v3.12.0`, librdkafka `v2.8.0` (static `rdkafka++`), zlib `v1.3.1`, and zstd `v1.5.6`, all linked into the plugin. OpenSSL is static too: on Windows configure with the vcpkg toolchain so it is the `/MT` build from `kafka/vcpkg.json` (the OpenSSL in `Program Files` is `/MD`); on Linux and macOS the build uses the PIC static archive from the system or Homebrew. The Linux archive still contains `libsasl2` because Cyrus SASL loads mechanism modules at runtime, and `libcrypto.so.3` because that `libsasl2` imports it. The plugin's own TLS does not. The first configure needs network access.
+It is written in C++. CMake FetchContent builds nlohmann/json `v3.12.0`, librdkafka `v2.8.0` (static `rdkafka++`), zlib `v1.3.1`, and zstd `v1.5.6`, all linked into the plugin. OpenSSL is static too: on Windows configure with the vcpkg toolchain so it is the `/MT` build from `kafka/vcpkg.json` (the OpenSSL in `Program Files` is `/MD`); on Linux and macOS the build uses the PIC static archive from the system or Homebrew. LZ4 and Snappy are the copies compiled into librdkafka. The first configure needs network access.
+
+Windows and macOS release archives contain only `KafkaPlugin.dll` or `libKafkaPlugin.dylib`. The Linux archive contains `libKafkaPlugin.so` plus `libsasl2.so.2` and `libsasl2.so.2.0.25`. Cyrus SASL loads mechanism modules at runtime, so `libsasl2` stays shared; copy those two files next to the plugin. The plugin's own TLS uses the static OpenSSL. On Windows the MSVC CRT is static (`/MT`), so the VC++ Redistributable is not required. Clients do not install OpenSSL, zlib, zstd, or librdkafka separately.
 
 Kafka has no native request/reply. The plugin uses headers:
 
