@@ -14,7 +14,7 @@ FetchContent_Declare(
     GIT_REPOSITORY https://github.com/google/googletest.git
     GIT_TAG v1.17.0
 )
-set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+set(gtest_force_shared_crt OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
 find_package(CURL REQUIRED)
@@ -34,6 +34,11 @@ target_link_libraries(PubSubPluginTests PRIVATE
     nlohmann_json::nlohmann_json
     Threads::Threads
 )
+
+get_target_property(_curl_type CURL::libcurl TYPE)
+if(_curl_type STREQUAL "STATIC_LIBRARY")
+    target_compile_definitions(PubSubPluginTests PRIVATE CURL_STATICLIB)
+endif()
 
 add_executable(PubSubPluginSmoke smoke.cpp)
 target_link_libraries(PubSubPluginSmoke PRIVATE PubSubPlugin)

@@ -2,7 +2,9 @@
 
 This plugin carries Graftcode Gateway calls over Google Cloud Pub/Sub. It implements `Hypertube::Native::Interfaces::ITransport` and `GraftcodeGateway::IServer`, and exports `CreateTransportChannel` / `DestroyTransportChannel` and `CreateServer` / `DestroyServer`.
 
-It is written in C++. Dependencies are libcurl, OpenSSL, and nlohmann/json, installed with the same vcpkg toolchain file as the SQS and Service Bus plugins.
+It is written in C++. Dependencies are libcurl, OpenSSL, and nlohmann/json, installed with the same vcpkg toolchain file as the SQS and Service Bus plugins. They are linked into the plugin.
+
+The release archive contains only the plugin shared library (`PubSubPlugin.dll`, `libPubSubPlugin.so`, or `libPubSubPlugin.dylib`). On Windows the build uses `/MT` and the `*-windows-static` vcpkg triplet, and curl uses Schannel. The VC++ Redistributable is not required. Clients do not install curl, OpenSSL, or zlib separately.
 
 ## Why not google-cloud-cpp
 
@@ -52,7 +54,7 @@ Output:
 - Windows: `pubsub/build/PubSubPlugin/PubSubPlugin.dll` — config `"name": "PubSubPlugin"`
 - Linux/macOS: `pubsub/build/PubSubPlugin/libPubSubPlugin.so` or `.dylib` — config `"name": "libPubSubPlugin"`
 
-On Windows, copy `PubSubPlugin.dll` and the vcpkg runtime DLLs (libcurl, libssl, libcrypto, zlib) from `build/vcpkg_installed/<triplet>/bin` next to `gg.exe`. The loader does not search the build tree.
+On Windows, copy `PubSubPlugin.dll` next to `gg.exe`. Nothing else from this plugin is required.
 
 Hermetic tests always run. The round-trip test runs only when `PUBSUB_EMULATOR_HOST` or `PUBSUB_LIVE` is set.
 
@@ -81,7 +83,6 @@ This layout is the same shape as the SQS sample. Put these files in one folder:
 - `gg.exe`
 - the hosted module, for example `netapp.dll`
 - `PubSubPlugin.dll`
-- the libcurl and OpenSSL DLLs from the vcpkg `bin` directory
 
 `pubsubplugin.json` (same contents as [`samples/pubsub/pluginConfig.gateway.json`](../samples/pubsub/pluginConfig.gateway.json)):
 
@@ -113,6 +114,29 @@ Open `http://localhost:81/GV` and install the generated package.
 graft.nuget.netapp.GraftConfig.SetConfig("clientconfig.json");
 var calculator = new graft.nuget.netapp.Calculator();
 calculator.Add(1, 2);
+```
+
+```json
+{
+  "configurations": {
+    "graft.nuget.netapp": {
+      "runtime": "netcore",
+      "host": "localhost:80",
+      "stateless": true,
+      "plugin": {
+        "name": "PubSubPlugin",
+        "projectId": "graftcode-local",
+        "emulatorHost": "localhost:8085",
+        "requestTopic": "graft-requests",
+        "replyTopic": "graft-replies",
+        "rpcTimeoutMs": 30000,
+        "ackDeadlineSeconds": 60,
+        "autoCreate": true,
+        "verifySsl": false
+      }
+    }
+  }
+}
 ```
 
 On Google Cloud, omit `emulatorHost` and `verifySsl`. Provide credentials with one of:

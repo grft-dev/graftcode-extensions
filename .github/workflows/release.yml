@@ -11,6 +11,7 @@ on:
       - "kafka/**"
       - "sqs/**"
       - "pubsub/**"
+      - "cmake/**"
       - ".github/workflows/release.yml"
   pull_request:
     branches: [ "main" ]
@@ -20,6 +21,7 @@ on:
       - "kafka/**"
       - "sqs/**"
       - "pubsub/**"
+      - "cmake/**"
       - ".github/workflows/release.yml"
   workflow_dispatch:
     inputs:
@@ -88,7 +90,7 @@ jobs:
               echo "ARTIFACT_PATH=servicebus/build/ServiceBusPlugin" >> "$GITHUB_ENV"
               echo "CONFIGURE_ARGS=-DCMAKE_TOOLCHAIN_FILE=${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake" >> "$GITHUB_ENV"
               if [ "${{ runner.os }}" = "Linux" ]; then
-                echo "INSTALL_PACKAGES=build-essential cmake git ninja-build pkg-config" >> "$GITHUB_ENV"
+                echo "INSTALL_PACKAGES=build-essential cmake git ninja-build pkg-config patchelf" >> "$GITHUB_ENV"
               elif [ "${{ runner.os }}" = "macOS" ]; then
                 echo "INSTALL_PACKAGES=cmake ninja pkg-config" >> "$GITHUB_ENV"
               else
@@ -100,7 +102,7 @@ jobs:
               echo "ARTIFACT_PATH=sqs/build/SqsPlugin" >> "$GITHUB_ENV"
               echo "CONFIGURE_ARGS=-DCMAKE_TOOLCHAIN_FILE=${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake" >> "$GITHUB_ENV"
               if [ "${{ runner.os }}" = "Linux" ]; then
-                echo "INSTALL_PACKAGES=build-essential cmake git ninja-build pkg-config" >> "$GITHUB_ENV"
+                echo "INSTALL_PACKAGES=build-essential cmake git ninja-build pkg-config patchelf" >> "$GITHUB_ENV"
               elif [ "${{ runner.os }}" = "macOS" ]; then
                 echo "INSTALL_PACKAGES=cmake ninja pkg-config" >> "$GITHUB_ENV"
               else
@@ -112,7 +114,7 @@ jobs:
               echo "ARTIFACT_PATH=pubsub/build/PubSubPlugin" >> "$GITHUB_ENV"
               echo "CONFIGURE_ARGS=-DCMAKE_TOOLCHAIN_FILE=${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake" >> "$GITHUB_ENV"
               if [ "${{ runner.os }}" = "Linux" ]; then
-                echo "INSTALL_PACKAGES=build-essential cmake git ninja-build pkg-config" >> "$GITHUB_ENV"
+                echo "INSTALL_PACKAGES=build-essential cmake git ninja-build pkg-config patchelf" >> "$GITHUB_ENV"
               elif [ "${{ runner.os }}" = "macOS" ]; then
                 echo "INSTALL_PACKAGES=cmake ninja pkg-config" >> "$GITHUB_ENV"
               else
@@ -122,12 +124,15 @@ jobs:
             kafka)
               echo "DIRECTORY=kafka" >> "$GITHUB_ENV"
               echo "ARTIFACT_PATH=kafka/build/KafkaPlugin" >> "$GITHUB_ENV"
-              echo "CONFIGURE_ARGS=" >> "$GITHUB_ENV"
               if [ "${{ runner.os }}" = "Linux" ]; then
-                echo "INSTALL_PACKAGES=build-essential cmake git libssl-dev libsasl2-dev zlib1g-dev" >> "$GITHUB_ENV"
+                echo "CONFIGURE_ARGS=" >> "$GITHUB_ENV"
+                echo "INSTALL_PACKAGES=build-essential cmake git libssl-dev libsasl2-dev patchelf" >> "$GITHUB_ENV"
               elif [ "${{ runner.os }}" = "macOS" ]; then
+                echo "CONFIGURE_ARGS=" >> "$GITHUB_ENV"
                 echo "INSTALL_PACKAGES=cmake openssl" >> "$GITHUB_ENV"
               else
+                # Static OpenSSL/zlib built with /MT. The Program Files OpenSSL is /MD.
+                echo "CONFIGURE_ARGS=-DCMAKE_TOOLCHAIN_FILE=${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake" >> "$GITHUB_ENV"
                 echo "INSTALL_PACKAGES=cmake" >> "$GITHUB_ENV"
               fi
               ;;
@@ -136,7 +141,7 @@ jobs:
               echo "ARTIFACT_PATH=rabbitmq/build/RabbitmqPlugin" >> "$GITHUB_ENV"
               echo "CONFIGURE_ARGS=" >> "$GITHUB_ENV"
               if [ "${{ runner.os }}" = "Linux" ]; then
-                echo "INSTALL_PACKAGES=build-essential cmake git" >> "$GITHUB_ENV"
+                echo "INSTALL_PACKAGES=build-essential cmake git patchelf" >> "$GITHUB_ENV"
               elif [ "${{ runner.os }}" = "macOS" ]; then
                 echo "INSTALL_PACKAGES=cmake" >> "$GITHUB_ENV"
               else
@@ -173,10 +178,61 @@ jobs:
         run: |
           ctest --test-dir build -C Release --output-on-failure --timeout 180
 
+      # cmake --install --component plugin-runtime copies the plugin and the
+      # shared libraries it actually loads. FetchContent install rules and
+      # MSVC import libraries stay out of that component.
       - name: Package (${{ matrix.plugin }})
+        shell: bash
         run: |
-          mkdir -p release-payloads
-          tar -czf "release-payloads/${{ env.PLUGIN_NAME }}-${{ env.PACKAGE_SUFFIX }}.tar.gz" -C "${{ env.ARTIFACT_PATH }}" .
+          set -euo pipefail
+          staging="${GITHUB_WORKSPACE}/package-staging"
+          flat="${GITHUB_WORKSPACE}/package-flat"
+          rm -rf "${staging}" "${flat}"
+          mkdir -p "${staging}" "${flat}" release-payloads
+          cmake --install "${DIRECTORY}/build" --config Release --prefix "${staging}" --component plugin-runtime
+
+          find "${staging}" \( -type f -o -type l \) \( \
+              -name '*.dll' -o -name '*.DLL' -o \
+              -name '*.dylib' -o \
+              -name '*.so' -o -name '*.so.*' \
+            \) -print0 |
+            while IFS= read -r -d '' shared; do
+              cp -a "${shared}" "${flat}/$(basename "${shared}")"
+            done
+
+          count="$(find "${flat}" -maxdepth 1 \( -type f -o -type l \) | wc -l)"
+          if [[ "${count}" -eq 0 ]]; then
+            echo "error: no shared libraries installed from ${DIRECTORY}/build" >&2
+            find "${staging}" -print >&2 || true
+            exit 1
+          fi
+
+          stem="$(basename "${ARTIFACT_PATH}")"
+          plugin_found=0
+          for candidate in \
+            "${flat}/${stem}.dll" \
+            "${flat}/${stem}.DLL" \
+            "${flat}/lib${stem}.so" \
+            "${flat}/${stem}.so" \
+            "${flat}/lib${stem}.dylib" \
+            "${flat}/${stem}.dylib"
+          do
+            if [[ -e "${candidate}" ]]; then
+              plugin_found=1
+            fi
+          done
+          if compgen -G "${flat}/lib${stem}.so.*" >/dev/null || compgen -G "${flat}/${stem}.so.*" >/dev/null; then
+            plugin_found=1
+          fi
+          if [[ "${plugin_found}" -ne 1 ]]; then
+            echo "error: plugin shared library ${stem} was not installed" >&2
+            find "${flat}" -maxdepth 1 -print >&2
+            exit 1
+          fi
+
+          echo "Packaged shared libraries:"
+          find "${flat}" -maxdepth 1 \( -type f -o -type l \) -exec basename {} \; | sort
+          tar -czf "release-payloads/${PLUGIN_NAME}-${PACKAGE_SUFFIX}.tar.gz" -C "${flat}" .
 
       - name: Upload artifact (${{ matrix.plugin }})
         uses: actions/upload-artifact@v6

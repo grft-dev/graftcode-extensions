@@ -23,3 +23,8 @@ target_link_libraries(${target_name} PUBLIC
     nlohmann_json::nlohmann_json
     Threads::Threads
 )
+
+get_target_property(_curl_type CURL::libcurl TYPE)
+if(_curl_type STREQUAL "STATIC_LIBRARY")
+    target_compile_definitions(${target_name} PRIVATE CURL_STATICLIB)
+endif()

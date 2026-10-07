@@ -9,6 +9,8 @@ factory symbols (`CreateTransportChannel` / `DestroyTransportChannel` and
 It is written in C++ and talks to Azure Service Bus over its native AMQP 1.0 protocol using
 the Azure SDK for C++ AMQP library (`azure-core-amqp`), acquired through vcpkg.
 
+The release archive contains only the plugin shared library (`ServiceBusPlugin.dll`, `libServiceBusPlugin.so`, or `libServiceBusPlugin.dylib`). The Azure SDK is linked into that library. On Windows the build uses `/MT` and the `*-windows-static` vcpkg triplet, so the VC++ Redistributable is not required. Clients do not install the Azure SDK, OpenSSL, or curl separately.
+
 ## 1) Clone repository
 
 ```bash
