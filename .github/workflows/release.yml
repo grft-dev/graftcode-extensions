@@ -11,6 +11,7 @@ on:
       - "kafka/**"
       - "sqs/**"
       - "pubsub/**"
+      - "cmake/**"
       - ".github/workflows/release.yml"
   pull_request:
     branches: [ "main" ]
@@ -20,6 +21,7 @@ on:
       - "kafka/**"
       - "sqs/**"
       - "pubsub/**"
+      - "cmake/**"
       - ".github/workflows/release.yml"
   workflow_dispatch:
     inputs:
@@ -88,7 +90,7 @@ jobs:
               echo "ARTIFACT_PATH=servicebus/build/ServiceBusPlugin" >> "$GITHUB_ENV"
               echo "CONFIGURE_ARGS=-DCMAKE_TOOLCHAIN_FILE=${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake" >> "$GITHUB_ENV"
               if [ "${{ runner.os }}" = "Linux" ]; then
-                echo "INSTALL_PACKAGES=build-essential cmake git ninja-build pkg-config" >> "$GITHUB_ENV"
+                echo "INSTALL_PACKAGES=build-essential cmake git ninja-build pkg-config patchelf" >> "$GITHUB_ENV"
               elif [ "${{ runner.os }}" = "macOS" ]; then
                 echo "INSTALL_PACKAGES=cmake ninja pkg-config" >> "$GITHUB_ENV"
               else
@@ -100,7 +102,7 @@ jobs:
               echo "ARTIFACT_PATH=sqs/build/SqsPlugin" >> "$GITHUB_ENV"
               echo "CONFIGURE_ARGS=-DCMAKE_TOOLCHAIN_FILE=${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake" >> "$GITHUB_ENV"
               if [ "${{ runner.os }}" = "Linux" ]; then
-                echo "INSTALL_PACKAGES=build-essential cmake git ninja-build pkg-config" >> "$GITHUB_ENV"
+                echo "INSTALL_PACKAGES=build-essential cmake git ninja-build pkg-config patchelf" >> "$GITHUB_ENV"
               elif [ "${{ runner.os }}" = "macOS" ]; then
                 echo "INSTALL_PACKAGES=cmake ninja pkg-config" >> "$GITHUB_ENV"
               else
@@ -112,7 +114,7 @@ jobs:
               echo "ARTIFACT_PATH=pubsub/build/PubSubPlugin" >> "$GITHUB_ENV"
               echo "CONFIGURE_ARGS=-DCMAKE_TOOLCHAIN_FILE=${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake" >> "$GITHUB_ENV"
               if [ "${{ runner.os }}" = "Linux" ]; then
-                echo "INSTALL_PACKAGES=build-essential cmake git ninja-build pkg-config" >> "$GITHUB_ENV"
+                echo "INSTALL_PACKAGES=build-essential cmake git ninja-build pkg-config patchelf" >> "$GITHUB_ENV"
               elif [ "${{ runner.os }}" = "macOS" ]; then
                 echo "INSTALL_PACKAGES=cmake ninja pkg-config" >> "$GITHUB_ENV"
               else
@@ -124,7 +126,7 @@ jobs:
               echo "ARTIFACT_PATH=kafka/build/KafkaPlugin" >> "$GITHUB_ENV"
               echo "CONFIGURE_ARGS=" >> "$GITHUB_ENV"
               if [ "${{ runner.os }}" = "Linux" ]; then
-                echo "INSTALL_PACKAGES=build-essential cmake git libssl-dev libsasl2-dev zlib1g-dev" >> "$GITHUB_ENV"
+                echo "INSTALL_PACKAGES=build-essential cmake git libssl-dev libsasl2-dev zlib1g-dev patchelf" >> "$GITHUB_ENV"
               elif [ "${{ runner.os }}" = "macOS" ]; then
                 echo "INSTALL_PACKAGES=cmake openssl" >> "$GITHUB_ENV"
               else
@@ -136,7 +138,7 @@ jobs:
               echo "ARTIFACT_PATH=rabbitmq/build/RabbitmqPlugin" >> "$GITHUB_ENV"
               echo "CONFIGURE_ARGS=" >> "$GITHUB_ENV"
               if [ "${{ runner.os }}" = "Linux" ]; then
-                echo "INSTALL_PACKAGES=build-essential cmake git" >> "$GITHUB_ENV"
+                echo "INSTALL_PACKAGES=build-essential cmake git patchelf" >> "$GITHUB_ENV"
               elif [ "${{ runner.os }}" = "macOS" ]; then
                 echo "INSTALL_PACKAGES=cmake" >> "$GITHUB_ENV"
               else
