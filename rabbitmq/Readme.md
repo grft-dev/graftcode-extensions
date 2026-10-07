@@ -24,7 +24,7 @@ cmake --build build --config Release
 
 Output:
 
-- Windows: `rabbitmq/build/RabbitmqPlugin/RabbitmqPlugin.dll` — config `"name": "RabbitmqPlugin"`
+- Windows: `rabbitmq/build/RabbitmqPlugin/RabbitmqPlugin.dll` — config `"name": "RabbitmqPlugin"`. AMQP-CPP and the VC++ runtime are linked in (`/MT`); the VC++ Redistributable is not required.
 - Linux/macOS: `rabbitmq/build/RabbitmqPlugin/libRabbitmqPlugin.so` or `.dylib` — config `"name": "libRabbitmqPlugin"`
 
 Download `gg` from https://github.com/grft-dev/graftcode-gateway/releases/.

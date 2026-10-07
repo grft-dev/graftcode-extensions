@@ -15,7 +15,8 @@ FetchContent_Declare(
 )
 
 # For Windows: Prevent overriding the parent project's compiler/linker settings
-set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+# Static /MT in the parent. ON would leave gtest on the DLL CRT and LNK2038.
+set(gtest_force_shared_crt OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
 target_include_directories(RabbitMqPluginTests PUBLIC
@@ -24,7 +25,7 @@ target_include_directories(RabbitMqPluginTests PUBLIC
 )
 target_link_libraries(RabbitMqPluginTests PRIVATE gtest_main amqpcpp nlohmann_json::nlohmann_json)
 
-if(${OSNAME} MATCHES "Windows")
+if(WIN32)
 	target_link_libraries(RabbitMqPluginTests PRIVATE ws2_32)
 endif()
 

@@ -34,8 +34,7 @@ Colocate these next to each other:
 
 - `gg.exe`
 - `netapp.dll` (the hosted module)
-- `SqsPlugin.dll`
-- the AWS SDK runtime DLLs
+- `SqsPlugin.dll` (the AWS SDK and the VC++ runtime are linked in)
 
 Copy `pluginConfig.gateway.json` to that folder as `sqsplugin.json` and run:
 

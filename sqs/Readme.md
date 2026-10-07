@@ -38,7 +38,7 @@ Output:
 - Windows: `sqs/build/SqsPlugin/SqsPlugin.dll` — config `"name": "SqsPlugin"`
 - Linux/macOS: `sqs/build/SqsPlugin/libSqsPlugin.so` or `.dylib` — config `"name": "libSqsPlugin"`
 
-On Windows, copy `SqsPlugin.dll` and the AWS SDK runtime DLLs next to `gg.exe`. The loader does not search the build tree.
+On Windows, copy `SqsPlugin.dll` next to `gg.exe`. The AWS SDK and the VC++ runtime are linked into that DLL (`/MT` and the `*-windows-static` vcpkg triplet), so the VC++ Redistributable is not required.
 
 Download `gg` from https://github.com/grft-dev/graftcode-gateway/releases/.
 

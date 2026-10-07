@@ -2,7 +2,7 @@
 
 This plugin carries Graftcode Gateway calls over Apache Kafka. It implements `Hypertube::Native::Interfaces::ITransport` and `GraftcodeGateway::IServer`, and exports `CreateTransportChannel` / `DestroyTransportChannel` and `CreateServer` / `DestroyServer`.
 
-It is written in C++. CMake FetchContent builds nlohmann/json `v3.12.0` and librdkafka `v2.8.0` (static `rdkafka++`). There is no vcpkg manifest. The first configure needs network access for those downloads.
+It is written in C++. CMake FetchContent builds nlohmann/json `v3.12.0` and librdkafka `v2.8.0` (static `rdkafka++`). OpenSSL, zlib, and LZ4 are linked statically. On Windows, configure with the vcpkg toolchain so OpenSSL and zlib are the static `/MT` builds from `kafka/vcpkg.json` (the OpenSSL in `Program Files` is `/MD`). On Linux, `libsasl2`, `libz`, and `libzstd` stay shared: Cyrus SASL loads mechanism modules at runtime (and imports `libcrypto.so.3`), and the distro static zlib and zstd archives are not built with `-fPIC`. The first configure needs network access.
 
 Kafka has no native request/reply. The plugin uses headers:
 
@@ -21,6 +21,7 @@ git clone https://github.com/grft-dev/graftcode-extensions.git
 cd graftcode-extensions/kafka
 
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+# Windows: add -DCMAKE_TOOLCHAIN_FILE=<vcpkg>/scripts/buildsystems/vcpkg.cmake
 cmake --build build --config Release
 ```
 

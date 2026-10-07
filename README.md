@@ -19,7 +19,7 @@ Use RabbitMQ or Kafka when you already run that broker. Use Service Bus or SQS w
 ## Use a plugin
 
 1. Build the plugin (see its Readme). The artifact is a shared library: `SqsPlugin.dll` on Windows, or `libSqsPlugin.so` / `.dylib` on Linux and macOS.
-2. Put `gg`, the hosted module, the plugin library, and any runtime DLLs in one folder. `name` in the config is the library file name without the extension (`libSqsPlugin` when the file is `libSqsPlugin.so`).
+2. Put `gg`, the hosted module, and the plugin library in one folder, plus any extra shared libraries from that plugin's release archive. Windows archives are the plugin DLL alone (static VC++ runtime, no VC++ Redistributable). Linux Kafka still ships `libsasl2` (and the `libcrypto` it imports), plus `libz` and `libzstd`. `name` in the config is the library file name without the extension (`libSqsPlugin` when the file is `libSqsPlugin.so`).
 3. Start the Gateway with `--config`. A verified SQS layout is in [samples/sqs](samples/sqs/README.md): `gg netapp.dll --config sqsplugin.json`.
 4. Open `http://localhost:81/GV`, install the generated package, and call `GraftConfig.SetConfig` with the same channel settings. `host` there is the Gateway HTTP address, not the broker.
 

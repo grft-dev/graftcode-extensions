@@ -45,6 +45,8 @@ As a result, you will receive:
 - `servicebus/build/ServiceBusPlugin/ServiceBusPlugin.dll`
 - or `servicebus/build/ServiceBusPlugin/libServiceBusPlugin.so` / `.dylib` on Linux/macOS
 
+Windows uses `/MT` and the `*-windows-static` vcpkg triplet, so the Azure SDK and the VC++ runtime are linked into `ServiceBusPlugin.dll`. The VC++ Redistributable is not required.
+
 If the generated library is `libServiceBusPlugin.*`, use plugin name: `libServiceBusPlugin`.
 
 ## 5) Download GG

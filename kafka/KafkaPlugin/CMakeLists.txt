@@ -24,6 +24,19 @@ FetchContent_MakeAvailable(json)
 set(RDKAFKA_BUILD_STATIC ON CACHE BOOL "Build librdkafka as static library" FORCE)
 set(RDKAFKA_BUILD_EXAMPLES OFF CACHE BOOL "Skip librdkafka examples" FORCE)
 set(RDKAFKA_BUILD_TESTS OFF CACHE BOOL "Skip librdkafka tests" FORCE)
+# Bundled LZ4. External liblz4 is a shared library on Homebrew and some distros.
+set(ENABLE_LZ4_EXT OFF CACHE BOOL "Use librdkafka's bundled LZ4" FORCE)
+# libcurl would be another shared dependency, and OIDC is unused by this plugin.
+set(WITH_CURL OFF CACHE BOOL "Do not link libcurl into librdkafka" FORCE)
+
+# Unix OpenSSL static archives are PIC and link into the plugin. Distro
+# libz.a and libzstd.a are not, so zlib and zstd stay shared. Windows uses
+# the vcpkg static triplet (libcrypto.lib / zlib.lib built with /MT).
+# OPENSSL_USE_STATIC_LIBS would look for libcrypto_static, which vcpkg does
+# not install, so it is Unix-only.
+if(UNIX AND NOT WIN32)
+    set(OPENSSL_USE_STATIC_LIBS ON)
+endif()
 
 FetchContent_Declare(
     librdkafka
