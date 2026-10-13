@@ -6,11 +6,15 @@ Official open-source Graftcode Gateway plugins. Each plugin carries Graft calls 
 
 | Plugin | Channel | Modes | Local setup | Docs |
 |--------|---------|-------|-------------|------|
-| [rabbitmq](rabbitmq/Readme.md) | RabbitMQ (AMQP 0-9-1) | request/reply | Docker image in `rabbitmq/` | [Readme](rabbitmq/Readme.md) |
-| [servicebus](servicebus/Readme.md) | Azure Service Bus (AMQP 1.0) | request/reply and one-way | Service Bus emulator | [Readme](servicebus/Readme.md) |
-| [kafka](kafka/Readme.md) | Apache Kafka | request/reply | [samples/kafka](samples/kafka/README.md) | [Readme](kafka/Readme.md) |
-| [sqs](sqs/Readme.md) | Amazon SQS | request/reply and one-way | [samples/sqs](samples/sqs/README.md) (LocalStack) | [Readme](sqs/Readme.md) |
-| [pubsub](pubsub/Readme.md) | Google Cloud Pub/Sub | request/reply and one-way | [samples/pubsub](samples/pubsub/README.md) (Pub/Sub emulator) | [Readme](pubsub/Readme.md) |
+| [rabbitmq](rabbitmq/Readme.md) | RabbitMQ (AMQP 0-9-1) | request/reply | [samples/rabbitmq](samples/rabbitmq) | [Readme](rabbitmq/Readme.md) |
+| [servicebus](servicebus/Readme.md) | Azure Service Bus (AMQP 1.0) | request/reply and one-way | [samples/servicebus](samples/servicebus) | [Readme](servicebus/Readme.md) |
+| [kafka](kafka/Readme.md) | Apache Kafka | request/reply | [samples/kafka](samples/kafka) | [Readme](kafka/Readme.md) |
+| [sqs](sqs/Readme.md) | Amazon SQS | request/reply and one-way | [samples/sqs](samples/sqs) (LocalStack) | [Readme](sqs/Readme.md) |
+| [pubsub](pubsub/Readme.md) | Google Cloud Pub/Sub | request/reply and one-way | [samples/pubsub](samples/pubsub) (Pub/Sub emulator) | [Readme](pubsub/Readme.md) |
+
+All local Docker setups, ports, and startup instructions are documented in
+[samples/README.md](samples/README.md). Each setup starts its middleware and
+three Gateway servers consuming from the same request destination.
 
 OpenTelemetry / Application Insights lives under [observability/opentelemetry](observability/opentelemetry/dotnet/Graft.Netcore.Telemetry.AppInsightsConnector/README.md). It is not a transport plugin.
 
@@ -30,8 +34,8 @@ Each release archive is flat and contains the plugin shared library. Third-party
 
 1. Download the release archive for the platform, or build the plugin (see its Readme).
 2. Put `gg`, the hosted module, and the plugin library in one folder. For Linux Kafka, also put `libsasl2.so.2` and `libsasl2.so.2.0.25` from the same archive there.
-3. Start the Gateway with `--config` and one of the JSON files below. A verified SQS layout is in [samples/sqs](samples/sqs/README.md): `gg netapp.dll --config sqsplugin.json`.
-4. Open `http://localhost:81/GV`, install the generated package, and call `GraftConfig.SetConfig` with the same channel settings inside `plugin`. `host` next to `runtime` is the Gateway HTTP address, not the broker.
+3. Start the Gateway with `--config` and one of the JSON files below. Verified local Docker layouts are available under [samples](samples/README.md).
+4. Call the Gateway from .NET with the Hypertube SDK (see [Client configuration](#client-configuration)), or open `http://localhost:81/GV` and install the generated package.
 
 How the Gateway loads a plugin is described in the "Plugin server config" section of the [Graftcode Gateway](https://github.com/grft-dev/graftcode-gateway) README.
 
@@ -109,5 +113,29 @@ Pub/Sub (`pubsub/Readme.md`, emulator):
   "verifySsl": false
 }
 ```
+
+## Client configuration
+
+A .NET client can call the gateway directly through the Hypertube SDK. The client config wraps the plugin object in `configurations` → package name → `plugin`, with no `runtime` or `host` keys; the plugin carries the transport.
+
+```csharp
+using Hypertube.Netcore.Sdk;
+using Hypertube.Netcore.Sdk.Configuration;
+
+RuntimeBridge.AddConfig(ConfigPriority.User, configJsonOrPathToFile);
+var rtmCtx = RuntimeBridge.InitializeRC("graft.nuget.netapp");
+var result = rtmCtx.GetType("netapp.Calculator").CreateInstance()
+    .InvokeInstanceMethod("Add", 1, 2).Execute().GetValue();
+```
+
+`AddConfig` accepts a JSON string, a path to a JSON file, or the name of an environment variable holding either. The key under `configurations` must match the name passed to `InitializeRC`. Load one plugin config per process.
+
+| Plugin | Client config | `name` |
+|---|---|---|
+| RabbitMQ | [rabbitmq/Readme.md](rabbitmq/Readme.md#client-configuration) | `RabbitmqPlugin` |
+| Kafka | [kafka/Readme.md](kafka/Readme.md#client-configuration) | `KafkaPlugin` |
+| Service Bus | [servicebus/Readme.md](servicebus/Readme.md#client-configuration) | `ServiceBusPlugin` |
+| SQS | [sqs/Readme.md](sqs/Readme.md#client-configuration) | `SqsPlugin` |
+| Pub/Sub | [pubsub/Readme.md](pubsub/Readme.md#client-configuration) | `PubSubPlugin` |
 
 Part of the [Graftcode](https://github.com/grft-dev/graftcode) project.

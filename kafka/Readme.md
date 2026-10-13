@@ -36,7 +36,7 @@ Download `gg` from https://github.com/grft-dev/graftcode-gateway/releases/.
 
 ## Local broker
 
-Compose files are in [`samples/kafka`](../samples/kafka/README.md), not in this directory.
+Compose files are in [`samples/kafka`](../samples/kafka) (see [samples/README.md](../samples/README.md)), not in this directory.
 
 Apache Kafka (KRaft), broker `localhost:9092`, UI `http://localhost:8080`:
 
@@ -56,7 +56,7 @@ Set `"brokers": "localhost:19092"` when using Redpanda.
 
 ## Gateway
 
-`pluginConfig.json` (also [`samples/kafka/pluginConfig.gateway.json`](../samples/kafka/pluginConfig.gateway.json)):
+`pluginConfig.json`:
 
 ```json
 {
@@ -73,20 +73,16 @@ Set `"brokers": "localhost:19092"` when using Redpanda.
 ./gg .\PhysicsCalculator.dll --config .\pluginConfig.json
 ```
 
-Open `http://localhost:81/GV` and install the generated package.
+Open `http://localhost:81/GV` to install the generated package, or call the Gateway from .NET with the Hypertube SDK (see [Client configuration](#client-configuration)).
 
-## Client
+## Client configuration
 
-A full example is [`samples/kafka/graftConfig.kafka.example.json`](../samples/kafka/graftConfig.kafka.example.json). Use a client `groupId` such as `graft-client`; the plugin still adds a unique suffix. Kafka bootstrap servers belong in `plugin.brokers`. When the runtime also needs the Gateway HTTP address, set `"host": "localhost:80"` next to `runtime`, as in the [SQS client config](../samples/sqs/graftConfig.sqs.example.json).
+A .NET client can call the gateway through the Hypertube SDK. The client config has no `runtime` or `host` keys; the plugin carries the transport. Use a `groupId` different from the gateway's (`graft-gateway`).
 
-```csharp
-string configSource =
-"""
+```json
 {
   "configurations": {
-    "graft.nuget.PhysicsCalculator": {
-      "runtime": "netcore",
-      "stateless": true,
+    "graft.nuget.netapp": {
       "plugin": {
         "name": "KafkaPlugin",
         "brokers": "localhost:9092",
@@ -98,10 +94,19 @@ string configSource =
     }
   }
 }
-""";
-
-graft.nuget.PhysicsCalculator.GraftConfig.SetConfig(configSource);
 ```
+
+```csharp
+using Hypertube.Netcore.Sdk;
+using Hypertube.Netcore.Sdk.Configuration;
+
+RuntimeBridge.AddConfig(ConfigPriority.User, configJsonOrPathToFile);
+var rtmCtx = RuntimeBridge.InitializeRC("graft.nuget.netapp");
+var result = rtmCtx.GetType("netapp.Calculator").CreateInstance()
+    .InvokeInstanceMethod("Add", 1, 2).Execute().GetValue();
+```
+
+`AddConfig` accepts a JSON string, a path to a JSON file, or the name of an environment variable holding either. The key under `configurations` must match the name passed to `InitializeRC`. Load one plugin config per process.
 
 ## Configuration reference
 

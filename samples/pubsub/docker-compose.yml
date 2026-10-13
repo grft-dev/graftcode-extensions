@@ -1,6 +1,7 @@
-# Local Google Cloud Pub/Sub emulator for Graftcode PubSubPlugin samples.
+name: graftcode-pubsub
+
 services:
-  pubsub-emulator:
+  pubsub:
     image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
     container_name: graftcode-pubsub
     command:
@@ -12,3 +13,43 @@ services:
       - --host-port=0.0.0.0:8085
     ports:
       - "8085:8085"
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - --fail
+        - --silent
+        - http://localhost:8085/v1/projects/graftcode-local/topics
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+
+  server:
+    container_name: graftcode-pubsub-server
+    image: graftcode-pubsub-server
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+      args:
+        PLUGIN_NAME: pubsub
+    depends_on:
+      pubsub:
+        condition: service_healthy
+    ports:
+      - "10305:10301"
+      - "10405:10401"
+
+  server-2:
+    container_name: graftcode-pubsub-server-2
+    image: graftcode-pubsub-server
+    depends_on:
+      pubsub:
+        condition: service_healthy
+
+  server-3:
+    container_name: graftcode-pubsub-server-3
+    image: graftcode-pubsub-server
+    depends_on:
+      pubsub:
+        condition: service_healthy

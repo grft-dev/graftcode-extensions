@@ -1,0 +1,9 @@
+{
+  "name": "RabbitmqPlugin",
+  "host": "rabbitmq",
+  "port": 5672,
+  "queue": "myqueue",
+  "user": "graftcode",
+  "password": "graftcode",
+  "vhost": "/"
+}

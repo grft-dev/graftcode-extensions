@@ -115,7 +115,7 @@ Then run:
 ## 8) Get installation command
 
 Visit `http://localhost:81/GV`, select your package manager, and copy the generated
-installation command.
+installation command. To call the Gateway without the generated package, see [Client configuration](#client-configuration).
 
 Example for .NET:
 
@@ -124,21 +124,17 @@ dotnet new console
 dotnet add package -s https://grft.dev/019cf6aa-e2e0-74e7-a2b0-be30db97ccb5__graftcode graft.nuget.physicscalculator --version 1.0.0
 ```
 
-## 9) Configure Graft after installation
+## Client configuration
 
-Use this configuration:
+A .NET client can call the gateway through the Hypertube SDK. The client config has no `runtime` or `host` keys; the plugin carries the transport. The connection string targets the local emulator ([samples/servicebus](../samples/servicebus)). Use your namespace connection string in Azure.
 
-```csharp
-string configSource =
-"""
+```json
 {
   "configurations": {
-    "graft.nuget.PhysicsCalculator": {
-      "runtime": "netcore",
-      "stateless": true,
+    "graft.nuget.netapp": {
       "plugin": {
         "name": "ServiceBusPlugin",
-        "connectionString": "Endpoint=sb://<namespace>.servicebus.windows.net/;SharedAccessKeyName=<keyName>;SharedAccessKey=<key>",
+        "connectionString": "Endpoint=sb://localhost:5672;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;",
         "queue": "myqueue",
         "replyQueue": "myqueue.reply",
         "rpcTimeoutMs": 30000
@@ -146,10 +142,19 @@ string configSource =
     }
   }
 }
-""";
-
-graft.nuget.PhysicsCalculator.GraftConfig.SetConfig(configSource);
 ```
+
+```csharp
+using Hypertube.Netcore.Sdk;
+using Hypertube.Netcore.Sdk.Configuration;
+
+RuntimeBridge.AddConfig(ConfigPriority.User, configJsonOrPathToFile);
+var rtmCtx = RuntimeBridge.InitializeRC("graft.nuget.netapp");
+var result = rtmCtx.GetType("netapp.Calculator").CreateInstance()
+    .InvokeInstanceMethod("Add", 1, 2).Execute().GetValue();
+```
+
+`AddConfig` accepts a JSON string, a path to a JSON file, or the name of an environment variable holding either. The key under `configurations` must match the name passed to `InitializeRC`. Load one plugin config per process.
 
 ## Configuration reference
 
