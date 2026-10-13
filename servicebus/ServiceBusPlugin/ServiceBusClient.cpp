@@ -13,11 +13,13 @@
 
 #include <nlohmann/json.hpp>
 
+#include <atomic>
 #include <chrono>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <mutex>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -40,11 +42,15 @@ namespace
 	// specific session. Matches the value used by the official .NET/Java SDKs.
 	constexpr const char* SessionFilterName = "com.microsoft:session-filter";
 
+	std::recursive_mutex callMutex_;
+	std::atomic<std::uint64_t> correlationCounter_{ 0 };
+
 	std::string BuildCorrelationId()
 	{
 		const auto now = std::chrono::steady_clock::now().time_since_epoch().count();
+		const auto sequence = correlationCounter_.fetch_add(1, std::memory_order_relaxed);
 		std::ostringstream oss;
-		oss << "graftcode-" << std::this_thread::get_id() << "-" << now;
+		oss << "graftcode-" << std::this_thread::get_id() << "-" << now << "-" << sequence;
 		return oss.str();
 	}
 
@@ -252,6 +258,7 @@ bool ServiceBusClient::PublishOneWay(
 	const byte* payload,
 	std::size_t payloadSize)
 {
+	std::lock_guard<std::recursive_mutex> callLock(callMutex_);
 	if (config.topic.empty()) {
 		return false;
 	}
@@ -331,6 +338,7 @@ bool ServiceBusClient::SendRpc(
 	std::size_t payloadSize,
 	std::vector<byte>& responsePayload)
 {
+	std::lock_guard<std::recursive_mutex> callLock(callMutex_);
 	responsePayload.clear();
 
 	// One-way (topic) mode: publish and return immediately without a reply.

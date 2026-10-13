@@ -4,6 +4,7 @@
 #include <nlohmann/json.hpp>
 
 #include <cstring>
+#include <utility>
 
 #if defined(_WIN32)
 #define KAFKA_PLUGIN_EXPORT extern "C" __declspec(dllexport)
@@ -65,16 +66,30 @@ TransportKafka::TransportKafka(const char*, unsigned short, const char* configJs
 int TransportKafka::Initialize(byte, byte, byte) { return 0; }
 
 int TransportKafka::SendCommand(byte* messageByteArray, int32_t messageByteArrayLen) {
-    lastResponse_ = client_->call(messageByteArray, static_cast<std::size_t>(messageByteArrayLen));
-    return static_cast<int>(lastResponse_.size());
+    std::vector<unsigned char> response =
+        client_->call(messageByteArray, static_cast<std::size_t>(messageByteArrayLen));
+    const int responseSize = static_cast<int>(response.size());
+    std::unique_lock<std::shared_mutex> lock(responseByThreadMutex_);
+    responseByThread_[std::this_thread::get_id()] = std::move(response);
+    return responseSize;
 }
 
 int TransportKafka::ReadResponse(byte* responseByteArray, int32_t responseByteArrayLen) {
-    if (responseByteArrayLen < static_cast<int32_t>(lastResponse_.size())) {
+    std::vector<unsigned char> response;
+    {
+        std::unique_lock<std::shared_mutex> lock(responseByThreadMutex_);
+        const auto it = responseByThread_.find(std::this_thread::get_id());
+        if (it == responseByThread_.end()) {
+            return -1;
+        }
+        response = std::move(it->second);
+        responseByThread_.erase(it);
+    }
+    if (responseByteArrayLen < static_cast<int32_t>(response.size())) {
         return -1;
     }
-    if (!lastResponse_.empty()) {
-        std::memcpy(responseByteArray, lastResponse_.data(), lastResponse_.size());
+    if (!response.empty()) {
+        std::memcpy(responseByteArray, response.data(), response.size());
     }
     return 0;
 }

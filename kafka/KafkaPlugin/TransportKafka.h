@@ -1,7 +1,10 @@
 #pragma once
 #include "ITransport.h"
 #include "KafkaClient.h"
+#include <map>
 #include <memory>
+#include <shared_mutex>
+#include <thread>
 #include <vector>
 
 class TransportKafka : public Hypertube::Native::Interfaces::ITransport {
@@ -13,5 +16,6 @@ public:
 
 private:
     std::unique_ptr<KafkaClient> client_;
-    std::vector<unsigned char> lastResponse_;
+    std::map<std::thread::id, std::vector<unsigned char>> responseByThread_;
+    std::shared_mutex responseByThreadMutex_;
 };
