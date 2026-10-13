@@ -46,7 +46,7 @@ Download `gg` from https://github.com/grft-dev/graftcode-gateway/releases/.
 
 ## LocalStack
 
-Sample files and compose live in [`samples/sqs`](../samples/sqs/README.md). From `sqs/` you can also start the same LocalStack; the compose file creates `graft-requests` and `graft-replies`:
+Sample files and compose live in [`samples/sqs`](../samples/sqs) (see [samples/README.md](../samples/README.md)). From `sqs/` you can also start the same LocalStack; the compose file creates `graft-requests` and `graft-replies`:
 
 ```bash
 docker compose up -d
@@ -75,7 +75,7 @@ This layout was run locally against LocalStack. Put these files in one folder:
 - the hosted module, for example `netapp.dll`
 - `SqsPlugin.dll`
 
-`sqsplugin.json` (same contents as [`samples/sqs/pluginConfig.gateway.json`](../samples/sqs/pluginConfig.gateway.json)):
+`sqsplugin.json`:
 
 ```json
 {
@@ -97,25 +97,39 @@ From that folder:
 .\gg.exe netapp.dll --config sqsplugin.json
 ```
 
-Open `http://localhost:81/GV` and install the generated package (the verified client used `graft.nuget.netapp`).
+Open `http://localhost:81/GV` to install the generated package, or call the Gateway from .NET with the Hypertube SDK (see [Client configuration](#client-configuration)). The verified client used `graft.nuget.netapp`.
 
-## Client
+## AWS credentials and permissions
 
-`host` is the Gateway (`localhost:80`), not SQS. `clientconfig.json` matches [`samples/sqs/graftConfig.sqs.example.json`](../samples/sqs/graftConfig.sqs.example.json):
+On AWS, omit `endpointOverride`, `accessKeyId`, `secretAccessKey`, and `verifySsl`. The SDK default credential chain (IAM role, environment, or shared config) is used. `accessKeyId` and `secretAccessKey` must be set together; `sessionToken` is optional.
 
-```csharp
-graft.nuget.netapp.GraftConfig.SetConfig("clientconfig.json");
-var calculator = new graft.nuget.netapp.Calculator();
-calculator.Add(1, 2);
+The gateway identity needs `sqs:ReceiveMessage`, `sqs:DeleteMessage`, and `sqs:SendMessage` on the request queue (and `sqs:SendMessage` on reply queues). A client needs `sqs:SendMessage` on the request queue and `sqs:ReceiveMessage` plus `sqs:DeleteMessage` on its reply queue.
+
+## One-way calls
+
+Set `"oneWay": true` on both sides. The client omits `GraftcodeReplyTo` and does not wait. The gateway processes the request and deletes it without sending a reply. A reply queue is not required. Client `plugin` object:
+
+```json
+{
+  "name": "SqsPlugin",
+  "region": "us-east-1",
+  "endpointOverride": "http://localhost:4566",
+  "accessKeyId": "test",
+  "secretAccessKey": "test",
+  "requestQueueUrl": "http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/graft-requests",
+  "oneWay": true,
+  "verifySsl": false
+}
 ```
+
+## Client configuration
+
+A .NET client can call the gateway through the Hypertube SDK. The client config has no `runtime` or `host` keys; the plugin carries the transport. LocalStack values. Each client process needs its own `replyQueueUrl`.
 
 ```json
 {
   "configurations": {
     "graft.nuget.netapp": {
-      "runtime": "netcore",
-      "host": "localhost:80",
-      "stateless": true,
       "plugin": {
         "name": "SqsPlugin",
         "region": "us-east-1",
@@ -134,13 +148,17 @@ calculator.Add(1, 2);
 }
 ```
 
-On AWS, omit `endpointOverride`, `accessKeyId`, `secretAccessKey`, and `verifySsl`. The SDK default credential chain (IAM role, environment, or shared config) is used. `accessKeyId` and `secretAccessKey` must be set together; `sessionToken` is optional.
+```csharp
+using Hypertube.Netcore.Sdk;
+using Hypertube.Netcore.Sdk.Configuration;
 
-The gateway identity needs `sqs:ReceiveMessage`, `sqs:DeleteMessage`, and `sqs:SendMessage` on the request queue (and `sqs:SendMessage` on reply queues). A client needs `sqs:SendMessage` on the request queue and `sqs:ReceiveMessage` plus `sqs:DeleteMessage` on its reply queue.
+RuntimeBridge.AddConfig(ConfigPriority.User, configJsonOrPathToFile);
+var rtmCtx = RuntimeBridge.InitializeRC("graft.nuget.netapp");
+var result = rtmCtx.GetType("netapp.Calculator").CreateInstance()
+    .InvokeInstanceMethod("Add", 1, 2).Execute().GetValue();
+```
 
-## One-way calls
-
-Set `"oneWay": true` on both sides. The client omits `GraftcodeReplyTo` and does not wait. The gateway processes the request and deletes it without sending a reply. See [`samples/sqs/pluginConfig.oneway.json`](../samples/sqs/pluginConfig.oneway.json). A reply queue is not required.
+`AddConfig` accepts a JSON string, a path to a JSON file, or the name of an environment variable holding either. The key under `configurations` must match the name passed to `InitializeRC`. Load one plugin config per process.
 
 ## Configuration reference
 

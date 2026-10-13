@@ -73,39 +73,43 @@ docker exec -it graftcode-rabbitmq rabbitmqadmin declare queue name=myqueue.repl
 ./gg .\PhysicsCalculator.dll --config .\pluginConfig.json
 ```
 
-Open `http://localhost:81/GV` and install the generated package.
+Open `http://localhost:81/GV` to install the generated package, or call the Gateway from .NET with the Hypertube SDK (see [Client configuration](#client-configuration)).
 
-## Client
+## Client configuration
 
-`host` inside `configurations` is the Gateway address. Broker host and port stay in `plugin`.
+A .NET client can call the gateway through the Hypertube SDK. The client config has no `runtime` or `host` keys; the plugin carries the transport. Port `5673` and user `graftcode` match [samples/rabbitmq](../samples/rabbitmq). The standalone broker above uses `5672` and `guest`.
 
-```csharp
-string configSource =
-"""
+```json
 {
   "configurations": {
-    "graft.nuget.PhysicsCalculator": {
-      "runtime": "netcore",
-      "host": "localhost:80",
-      "stateless": true,
+    "graft.nuget.netapp": {
       "plugin": {
         "name": "RabbitmqPlugin",
         "host": "localhost",
-        "port": 5672,
+        "port": 5673,
         "queue": "myqueue",
         "replyQueue": "myqueue.reply",
-        "user": "guest",
-        "password": "guest",
+        "user": "graftcode",
+        "password": "graftcode",
         "vhost": "/",
         "rpcTimeoutMs": 30000
       }
     }
   }
 }
-""";
-
-graft.nuget.PhysicsCalculator.GraftConfig.SetConfig(configSource);
 ```
+
+```csharp
+using Hypertube.Netcore.Sdk;
+using Hypertube.Netcore.Sdk.Configuration;
+
+RuntimeBridge.AddConfig(ConfigPriority.User, configJsonOrPathToFile);
+var rtmCtx = RuntimeBridge.InitializeRC("graft.nuget.netapp");
+var result = rtmCtx.GetType("netapp.Calculator").CreateInstance()
+    .InvokeInstanceMethod("Add", 1, 2).Execute().GetValue();
+```
+
+`AddConfig` accepts a JSON string, a path to a JSON file, or the name of an environment variable holding either. The key under `configurations` must match the name passed to `InitializeRC`. Load one plugin config per process.
 
 ## Configuration reference
 

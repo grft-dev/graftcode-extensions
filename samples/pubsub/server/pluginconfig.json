@@ -1,7 +1,7 @@
 {
   "name": "PubSubPlugin",
   "projectId": "graftcode-local",
-  "emulatorHost": "localhost:8085",
+  "emulatorHost": "pubsub:8085",
   "requestTopic": "graft-requests",
   "ackDeadlineSeconds": 60,
   "autoCreate": true,

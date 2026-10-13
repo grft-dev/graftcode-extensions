@@ -1,4 +1,5 @@
-# Local Amazon SQS (LocalStack) for Graftcode SqsPlugin samples.
+name: graftcode-sqs
+
 services:
   localstack:
     image: localstack/localstack:4.8
@@ -9,9 +10,65 @@ services:
       SERVICES: sqs
       AWS_DEFAULT_REGION: us-east-1
       DEBUG: 0
+      SQS_ENDPOINT_STRATEGY: standard
     volumes:
       - localstack-data:/var/lib/localstack
-      - ./scripts/init-queues.sh:/etc/localstack/init/ready.d/init-queues.sh
+    healthcheck:
+      test: ["CMD", "awslocal", "sqs", "list-queues"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    networks:
+      default:
+        aliases:
+          - sqs.us-east-1.localhost.localstack.cloud
+
+  sqs-init:
+    image: localstack/localstack:4.8
+    depends_on:
+      localstack:
+        condition: service_healthy
+    environment:
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - >
+        awslocal --endpoint-url=http://localstack:4566 sqs create-queue --queue-name graft-requests &&
+        awslocal --endpoint-url=http://localstack:4566 sqs create-queue --queue-name graft-replies &&
+        awslocal --endpoint-url=http://localstack:4566 sqs get-queue-url --queue-name graft-requests &&
+        awslocal --endpoint-url=http://localstack:4566 sqs get-queue-url --queue-name graft-replies
+
+  server:
+    container_name: graftcode-sqs-server
+    image: graftcode-sqs-server
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+      args:
+        PLUGIN_NAME: sqs
+    depends_on:
+      sqs-init:
+        condition: service_completed_successfully
+    ports:
+      - "10304:10301"
+      - "10404:10401"
+
+  server-2:
+    container_name: graftcode-sqs-server-2
+    image: graftcode-sqs-server
+    depends_on:
+      sqs-init:
+        condition: service_completed_successfully
+
+  server-3:
+    container_name: graftcode-sqs-server-3
+    image: graftcode-sqs-server
+    depends_on:
+      sqs-init:
+        condition: service_completed_successfully
 
 volumes:
   localstack-data:

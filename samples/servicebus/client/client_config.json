@@ -1,0 +1,13 @@
+{
+  "configurations": {
+    "graft.nuget.netapp": {
+      "plugin": {
+        "name": "ServiceBusPlugin",
+        "connectionString": "Endpoint=sb://localhost:5672;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;",
+        "queue": "myqueue",
+        "replyQueue": "myqueue.reply",
+        "rpcTimeoutMs": 30000
+      }
+    }
+  }
+}

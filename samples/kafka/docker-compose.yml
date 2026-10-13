@@ -1,4 +1,5 @@
-# Lokalny Kafka (KRaft) + UI — testy Graftcode KafkaPlugin.
+name: graftcode-kafka
+
 services:
   kafka:
     image: apache/kafka:3.8.1
@@ -19,14 +20,63 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+    healthcheck:
+      test: ["CMD", "/opt/kafka/bin/kafka-broker-api-versions.sh", "--bootstrap-server", "localhost:9092"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  kafka-init:
+    image: apache/kafka:3.8.1
+    depends_on:
+      kafka:
+        condition: service_healthy
+    command:
+      - /bin/sh
+      - -c
+      - >
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9094
+        --create --if-not-exists --topic graft.requests --partitions 1 --replication-factor 1 &&
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9094
+        --create --if-not-exists --topic graft.replies --partitions 1 --replication-factor 1
 
   kafka-ui:
     image: provectuslabs/kafka-ui:v0.7.2
     container_name: graftcode-kafka-ui
     depends_on:
-      - kafka
+      kafka:
+        condition: service_healthy
     ports:
       - "8080:8080"
     environment:
       KAFKA_CLUSTERS_0_NAME: local
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9094
+
+  server:
+    container_name: graftcode-kafka-server
+    image: graftcode-kafka-server
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+      args:
+        PLUGIN_NAME: kafka
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    ports:
+      - "10303:10301"
+      - "10403:10401"
+
+  server-2:
+    container_name: graftcode-kafka-server-2
+    image: graftcode-kafka-server
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+
+  server-3:
+    container_name: graftcode-kafka-server-3
+    image: graftcode-kafka-server
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully

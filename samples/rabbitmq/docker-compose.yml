@@ -1,0 +1,49 @@
+name: graftcode-rabbitmq
+
+services:
+  rabbitmq:
+    container_name: graftcode-rabbitmq
+    image: rabbitmq:4-management
+    ports:
+      - "5673:5672"
+      - "15672:15672"
+    volumes:
+      - "./middleware/definitions.json:/etc/rabbitmq/definitions.json:ro"
+    environment:
+      RABBITMQ_DEFAULT_USER: graftcode
+      RABBITMQ_DEFAULT_PASS: graftcode
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: '-rabbitmq_management load_definitions "/etc/rabbitmq/definitions.json"'
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  server:
+    container_name: graftcode-rabbitmq-server
+    image: graftcode-rabbitmq-server
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+      args:
+        PLUGIN_NAME: rabbitmq
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    ports:
+      - "10302:10301"
+      - "10402:10401"
+
+  server-2:
+    container_name: graftcode-rabbitmq-server-2
+    image: graftcode-rabbitmq-server
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  server-3:
+    container_name: graftcode-rabbitmq-server-3
+    image: graftcode-rabbitmq-server
+    depends_on:
+      rabbitmq:
+        condition: service_healthy

@@ -62,7 +62,7 @@ Download `gg` from https://github.com/grft-dev/graftcode-gateway/releases/.
 
 ## Emulator
 
-Sample files and compose live in [`samples/pubsub`](../samples/pubsub/README.md). From `pubsub/` you can start the same emulator:
+Sample files and compose live in [`samples/pubsub`](../samples/pubsub) (see [samples/README.md](../samples/README.md)). From `pubsub/` you can start the same emulator:
 
 ```bash
 docker compose up -d
@@ -84,7 +84,7 @@ This layout is the same shape as the SQS sample. Put these files in one folder:
 - the hosted module, for example `netapp.dll`
 - `PubSubPlugin.dll`
 
-`pubsubplugin.json` (same contents as [`samples/pubsub/pluginConfig.gateway.json`](../samples/pubsub/pluginConfig.gateway.json)):
+`pubsubplugin.json`:
 
 ```json
 {
@@ -104,25 +104,42 @@ From that folder, with the emulator running:
 .\gg.exe netapp.dll --config pubsubplugin.json
 ```
 
-Open `http://localhost:81/GV` and install the generated package.
+Open `http://localhost:81/GV` to install the generated package, or call the Gateway from .NET with the Hypertube SDK (see [Client configuration](#client-configuration)).
 
-## Client
+## Google Cloud credentials and permissions
 
-`host` is the Gateway (`localhost:80`), not Pub/Sub. `clientconfig.json` matches [`samples/pubsub/graftConfig.pubsub.example.json`](../samples/pubsub/graftConfig.pubsub.example.json):
+On Google Cloud, omit `emulatorHost` and `verifySsl`. Provide credentials with one of:
 
-```csharp
-graft.nuget.netapp.GraftConfig.SetConfig("clientconfig.json");
-var calculator = new graft.nuget.netapp.Calculator();
-calculator.Add(1, 2);
+- `accessToken`, or `PUBSUB_ACCESS_TOKEN`
+- `credentialsFile`, or `GOOGLE_APPLICATION_CREDENTIALS`, pointing at a service-account JSON key
+- the GCE metadata server, when neither of the above is set
+
+The gateway identity needs `pubsub.subscriptions.consume` on the request subscription and `pubsub.topics.publish` on reply topics. A client needs `pubsub.topics.publish` on the request topic and `pubsub.subscriptions.consume` on its reply subscription. `autoCreate` also needs permission to create topics and subscriptions. Set `autoCreate` to false in production and create the resources ahead of time when the runtime identity should not administer Pub/Sub.
+
+## One-way calls
+
+Set `"oneWay": true` on both sides. The client omits `replyTo` and does not wait. The gateway processes the request and acks it without publishing a reply. A reply topic is not required. Client `plugin` object:
+
+```json
+{
+  "name": "PubSubPlugin",
+  "projectId": "graftcode-local",
+  "emulatorHost": "localhost:8085",
+  "requestTopic": "graft-requests",
+  "oneWay": true,
+  "autoCreate": true,
+  "verifySsl": false
+}
 ```
+
+## Client configuration
+
+A .NET client can call the gateway through the Hypertube SDK. The client config has no `runtime` or `host` keys; the plugin carries the transport. Emulator values. Each client process needs its own `replyTopic`.
 
 ```json
 {
   "configurations": {
     "graft.nuget.netapp": {
-      "runtime": "netcore",
-      "host": "localhost:80",
-      "stateless": true,
       "plugin": {
         "name": "PubSubPlugin",
         "projectId": "graftcode-local",
@@ -139,17 +156,17 @@ calculator.Add(1, 2);
 }
 ```
 
-On Google Cloud, omit `emulatorHost` and `verifySsl`. Provide credentials with one of:
+```csharp
+using Hypertube.Netcore.Sdk;
+using Hypertube.Netcore.Sdk.Configuration;
 
-- `accessToken`, or `PUBSUB_ACCESS_TOKEN`
-- `credentialsFile`, or `GOOGLE_APPLICATION_CREDENTIALS`, pointing at a service-account JSON key
-- the GCE metadata server, when neither of the above is set
+RuntimeBridge.AddConfig(ConfigPriority.User, configJsonOrPathToFile);
+var rtmCtx = RuntimeBridge.InitializeRC("graft.nuget.netapp");
+var result = rtmCtx.GetType("netapp.Calculator").CreateInstance()
+    .InvokeInstanceMethod("Add", 1, 2).Execute().GetValue();
+```
 
-The gateway identity needs `pubsub.subscriptions.consume` on the request subscription and `pubsub.topics.publish` on reply topics. A client needs `pubsub.topics.publish` on the request topic and `pubsub.subscriptions.consume` on its reply subscription. `autoCreate` also needs permission to create topics and subscriptions. Set `autoCreate` to false in production and create the resources ahead of time when the runtime identity should not administer Pub/Sub.
-
-## One-way calls
-
-Set `"oneWay": true` on both sides. The client omits `replyTo` and does not wait. The gateway processes the request and acks it without publishing a reply. A reply topic is not required. See [`samples/pubsub/pluginConfig.oneway.json`](../samples/pubsub/pluginConfig.oneway.json).
+`AddConfig` accepts a JSON string, a path to a JSON file, or the name of an environment variable holding either. The key under `configurations` must match the name passed to `InitializeRC`. Load one plugin config per process.
 
 ## Configuration reference
 

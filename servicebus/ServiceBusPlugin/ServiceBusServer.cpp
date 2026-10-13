@@ -41,6 +41,9 @@ namespace {
 	constexpr std::uint64_t kMaxMessageSize = 1024ULL * 1024ULL;
 	constexpr std::uint32_t kDefaultRpcTimeoutMs = 30000;
 	constexpr int kReceivePollMs = 1000;
+	// Service Bus (and the emulator) force-detach links idle for 10 min; sending on a
+	// detached cached link segfaults in azure-core-amqp, so recycle reply senders well before.
+	constexpr auto kReplySenderMaxIdle = std::chrono::minutes(5);
 
 	std::atomic_bool g_stopRequested{ false };
 
@@ -263,11 +266,6 @@ namespace {
 			const std::vector<byte>& responseBytes,
 			const AmqpModels::AmqpValue& correlationId,
 			const std::optional<std::string>& replySessionId) {
-			Amqp::MessageSender* sender = acquire(replyEntity);
-			if (sender == nullptr) {
-				return false;
-			}
-
 			AmqpModels::AmqpMessage response;
 			std::vector<std::uint8_t> body(responseBytes.begin(), responseBytes.end());
 			response.SetBody(AmqpModels::AmqpBinaryData(body));
@@ -280,12 +278,31 @@ namespace {
 			}
 			response.Properties.ContentType = std::string("application/octet-stream");
 
+			for (int attempt = 0; attempt < 2; ++attempt) {
+				Amqp::MessageSender* sender = acquire(replyEntity);
+				if (sender == nullptr) {
+					return false;
+				}
+				bool ok = false;
+				try {
 #if defined(ENABLE_RUST_AMQP) && ENABLE_RUST_AMQP
-			return !static_cast<bool>(sender->Send(response));
+					ok = !static_cast<bool>(sender->Send(response));
 #else
-			const auto sendResult = sender->Send(response);
-			return std::get<0>(sendResult) == Amqp::MessageSendStatus::Ok;
+					const auto sendResult = sender->Send(response);
+					ok = std::get<0>(sendResult) == Amqp::MessageSendStatus::Ok;
 #endif
+				}
+				catch (...) {
+					ok = false;
+				}
+				if (ok) {
+					lastUsed_[replyEntity] = std::chrono::steady_clock::now();
+					return true;
+				}
+				// Link likely detached by the broker; drop it and retry once with a fresh link.
+				evict(replyEntity);
+			}
+			return false;
 		}
 
 		void closeAll() {
@@ -297,13 +314,34 @@ namespace {
 				}
 			}
 			senders_.clear();
+			lastUsed_.clear();
 		}
 
 	private:
+		void evict(const std::string& replyEntity) {
+			const auto it = senders_.find(replyEntity);
+			if (it != senders_.end()) {
+				try {
+					it->second->Close();
+				}
+				catch (...) {
+				}
+				senders_.erase(it);
+			}
+			lastUsed_.erase(replyEntity);
+		}
+
 		Amqp::MessageSender* acquire(const std::string& replyEntity) {
 			const auto it = senders_.find(replyEntity);
 			if (it != senders_.end()) {
-				return it->second.get();
+				const auto used = lastUsed_.find(replyEntity);
+				const bool stale = used == lastUsed_.end()
+					|| std::chrono::steady_clock::now() - used->second > kReplySenderMaxIdle;
+				if (!stale) {
+					return it->second.get();
+				}
+				// Proactively replace before the broker's 10-min idle detach.
+				evict(replyEntity);
 			}
 
 			Amqp::MessageSenderOptions senderOptions;
@@ -321,11 +359,13 @@ namespace {
 
 			Amqp::MessageSender* raw = sender.get();
 			senders_.emplace(replyEntity, std::move(sender));
+			lastUsed_[replyEntity] = std::chrono::steady_clock::now();
 			return raw;
 		}
 
 		Amqp::Session& session_;
 		std::map<std::string, std::unique_ptr<Amqp::MessageSender>> senders_;
+		std::map<std::string, std::chrono::steady_clock::time_point> lastUsed_;
 	};
 }
 

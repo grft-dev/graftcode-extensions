@@ -1,0 +1,5 @@
+{
+  "name": "ServiceBusPlugin",
+  "connectionString": "Endpoint=sb://servicebus:5672;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;",
+  "queue": "myqueue"
+}
