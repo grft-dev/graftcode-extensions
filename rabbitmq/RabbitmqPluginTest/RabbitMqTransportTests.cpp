@@ -34,7 +34,6 @@ namespace {
 			"host": "127.0.0.1",
 			"port": 5672,
 			"queue": "gg",
-			"replyQueue": "gg.reply",
 			"user": "guest",
 			"password": "guest",
 			"vhost": "/",

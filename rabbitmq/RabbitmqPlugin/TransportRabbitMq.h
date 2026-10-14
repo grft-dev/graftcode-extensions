@@ -3,6 +3,7 @@
 #include "ITransport.h"
 #include "RabbitMqClient.h"
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -20,5 +21,6 @@ namespace Graftcode::Plugins::Rabbitmq
 	private:
 		RabbitMqClientConfig config_;
 		std::string configSource;
+		std::unique_ptr<RabbitMqRpcClient> client_;
 	};
 }

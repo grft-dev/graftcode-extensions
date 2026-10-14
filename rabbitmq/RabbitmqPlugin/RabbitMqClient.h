@@ -1,7 +1,11 @@
 #pragma once
 
+#include "PendingReplies.h"
+
 #include <cstddef>
 #include <cstdint>
+#include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -14,7 +18,6 @@ namespace Graftcode::Plugins::Rabbitmq
 		std::string host{ "" };
 		std::uint16_t port{  };
 		std::string queue{ "" };
-		std::string replyQueue{ "" };
 		std::string user{ "" };
 		std::string password{ "" };
 		std::string vhost{ "" };
@@ -39,5 +42,29 @@ namespace Graftcode::Plugins::Rabbitmq
 			const byte* payload,
 			std::size_t payloadSize,
 			std::vector<byte>& responsePayload);
+	};
+
+	// Request/reply client that keeps one connection open and lets Call run concurrently.
+	// Replies arrive on a private reply queue and are matched by correlation id.
+	class RabbitMqRpcClient
+	{
+	public:
+		explicit RabbitMqRpcClient(RabbitMqClientConfig config);
+		~RabbitMqRpcClient();
+
+		RabbitMqRpcClient(const RabbitMqRpcClient&) = delete;
+		RabbitMqRpcClient& operator=(const RabbitMqRpcClient&) = delete;
+
+		std::vector<byte> Call(const byte* payload, std::size_t payloadSize);
+
+	private:
+		class Link;
+
+		std::shared_ptr<Link> CurrentLink();
+
+		RabbitMqClientConfig config_;
+		Concurrency::PendingReplies pending_;
+		std::mutex linkMutex_;
+		std::shared_ptr<Link> link_;
 	};
 }

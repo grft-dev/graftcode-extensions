@@ -29,9 +29,11 @@
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
@@ -147,19 +149,6 @@ namespace
 		std::atomic_bool connectionError{ false };
 	};
 
-	struct RpcState
-	{
-		std::atomic_bool channelError{ false };
-		std::atomic_bool queueDeclared{ false };
-		std::atomic_bool consumerReady{ false };
-		std::atomic_bool publishAttempted{ false };
-		std::atomic_bool publishAccepted{ false };
-		std::atomic_bool responseReceived{ false };
-		std::string replyQueueName{};
-		std::string correlationId{};
-		std::vector<byte> responsePayload{};
-	};
-
 	class SocketConnectionHandler final : public AMQP::ConnectionHandler
 	{
 	public:
@@ -216,18 +205,15 @@ namespace
 		std::mutex sendMutex_;
 	};
 
+	std::atomic<std::uint64_t> correlationCounter{ 0 };
+
 	std::string BuildCorrelationId()
 	{
 		const auto now = std::chrono::steady_clock::now().time_since_epoch().count();
+		const auto sequence = correlationCounter.fetch_add(1, std::memory_order_relaxed);
 		std::ostringstream oss;
-		oss << std::this_thread::get_id() << "-" << now;
+		oss << std::this_thread::get_id() << "-" << now << "-" << sequence;
 		return oss.str();
-	}
-
-	std::string GetSessionConsumerTag()
-	{
-		static const std::string sessionConsumerTag = "hypertube-rpc-" + BuildCorrelationId();
-		return sessionConsumerTag;
 	}
 
 	std::optional<Json> ParseJsonConfigSource(const std::string& configSource)
@@ -272,7 +258,6 @@ namespace
 			}
 
 			const bool hasDedicatedRabbitKeys = node.contains("queue")
-				|| node.contains("replyQueue")
 				|| node.contains("user")
 				|| node.contains("password")
 				|| node.contains("vhost")
@@ -329,11 +314,6 @@ namespace
 		const auto queueIt = rabbitNode.find("queue");
 		if (queueIt != rabbitNode.end() && queueIt->is_string()) {
 			config.queue = queueIt->get<std::string>();
-		}
-
-		const auto replyQueueIt = rabbitNode.find("replyQueue");
-		if (replyQueueIt != rabbitNode.end() && replyQueueIt->is_string()) {
-			config.replyQueue = replyQueueIt->get<std::string>();
 		}
 
 		const auto userIt = rabbitNode.find("user");
@@ -404,163 +384,279 @@ bool RabbitMqClient::SendRpc(
 	std::vector<byte>& responsePayload)
 {
 	responsePayload.clear();
+	try {
+		RabbitMqRpcClient client(config);
+		responsePayload = client.Call(payload, payloadSize);
+		return true;
+	}
+	catch (...) {
+		responsePayload.clear();
+		return false;
+	}
+}
 
-	if (config.queue.empty()) {
-		return false;
-	}
-	if (config.replyQueue.empty()) {
-		return false;
-	}
-	if (payloadSize > 0 && payload == nullptr) {
-		return false;
-	}
-
+// One AMQP connection and channel with a private, exclusive reply queue. AMQP-CPP is not
+// thread safe, so every call into the connection or channel happens under amqpMutex_; the
+// I/O thread waits for socket data without holding it and dispatches replies by correlation id.
+class RabbitMqRpcClient::Link
+{
+public:
+	Link(const RabbitMqClientConfig& config, Concurrency::PendingReplies& pending)
+		: pending_(pending), queue_(config.queue)
+	{
 #ifdef _WIN32
-	WSAData wsaData{};
-	if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-		return false;
-	}
+		WSAData wsaData{};
+		if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+			throw std::runtime_error("RabbitMQ: WSAStartup failed");
+		}
 #endif
+		socket_ = ConnectSocket(config);
+		if (socket_ == InvalidSocket) {
+			Shutdown();
+			throw std::runtime_error(
+				"RabbitMQ: cannot connect to " + config.host + ":" + std::to_string(config.port));
+		}
 
-	SocketHandle socket = ConnectSocket(config);
-	if (socket == InvalidSocket) {
-#ifdef _WIN32
-		WSACleanup();
-#endif
-		return false;
+		handler_ = std::make_unique<SocketConnectionHandler>(socket_, runtimeState_);
+		connection_ = std::make_unique<AMQP::Connection>(
+			handler_.get(),
+			AMQP::Login(config.user, config.password),
+			config.vhost.empty() ? "/" : config.vhost);
+		channel_ = std::make_unique<AMQP::Channel>(connection_.get());
+		channel_->onError([this](const char* message) {
+			Disconnect(std::string("RabbitMQ channel error: ") + (message != nullptr ? message : ""));
+			});
+		channel_->declareQueue(AMQP::exclusive | AMQP::autodelete)
+			.onSuccess([this](const std::string& name, uint32_t, uint32_t) {
+				StartConsumer(name);
+				});
+
+		io_ = std::thread(&Link::Run, this);
+
+		const auto deadline = std::chrono::steady_clock::now() + ConnectionReadyTimeout;
+		while (!consumerReady_.load(std::memory_order_acquire) &&
+			!broken_.load(std::memory_order_acquire) &&
+			std::chrono::steady_clock::now() < deadline) {
+			std::this_thread::sleep_for(std::chrono::milliseconds(10));
+		}
+		if (!consumerReady_.load(std::memory_order_acquire)) {
+			const std::string error = broken_.load(std::memory_order_acquire)
+				? BrokenError()
+				: std::string("RabbitMQ: timed out waiting for the reply consumer");
+			Shutdown();
+			throw std::runtime_error(error);
+		}
 	}
 
-	RuntimeState runtimeState{};
-	RpcState rpcState{};
-	rpcState.correlationId = BuildCorrelationId();
+	~Link()
+	{
+		Shutdown();
+	}
 
-	SocketConnectionHandler handler(socket, runtimeState);
-	AMQP::Connection connection(
-		&handler,
-		AMQP::Login(config.user, config.password),
-		config.vhost.empty() ? "/" : config.vhost);
-	AMQP::Channel channel(&connection);
+	Link(const Link&) = delete;
+	Link& operator=(const Link&) = delete;
 
-	channel.onError([&](const char*) {
-		rpcState.channelError.store(true, std::memory_order_release);
-		});
+	bool Broken() const
+	{
+		return broken_.load(std::memory_order_acquire);
+	}
 
-	rpcState.replyQueueName = config.replyQueue;
-	rpcState.queueDeclared.store(true, std::memory_order_release);
+	void Publish(const std::string& correlationId, const byte* payload, std::size_t payloadSize)
+	{
+		std::lock_guard<std::mutex> lock(amqpMutex_);
+		if (broken_.load(std::memory_order_acquire)) {
+			throw std::runtime_error(BrokenError());
+		}
+		const char* body = payloadSize == 0 ? "" : reinterpret_cast<const char*>(payload);
+		AMQP::Envelope envelope(body, payloadSize);
+		envelope.setContentType("application/octet-stream");
+		envelope.setReplyTo(replyQueue_);
+		envelope.setCorrelationID(correlationId);
+		if (!channel_->publish("", queue_, envelope)) {
+			throw std::runtime_error("RabbitMQ: failed to publish request to queue " + queue_);
+		}
+	}
 
-	auto& consumer = channel.consume(config.replyQueue, GetSessionConsumerTag());
-	consumer.onSuccess([&](const std::string&) {
-		rpcState.consumerReady.store(true, std::memory_order_release);
-		}).onReceived([&](const AMQP::Message& message, uint64_t deliveryTag, bool) {
-			if (!message.hasCorrelationID() || message.correlationID() != rpcState.correlationId) {
-				channel.reject(deliveryTag, AMQP::requeue);
+private:
+	void StartConsumer(const std::string& replyQueue)
+	{
+		replyQueue_ = replyQueue;
+		channel_->consume(replyQueue_)
+			.onSuccess([this](const std::string&) {
+				consumerReady_.store(true, std::memory_order_release);
+				})
+			.onReceived([this](const AMQP::Message& message, uint64_t deliveryTag, bool) {
+				std::vector<byte> body(message.bodySize());
+				if (!body.empty()) {
+					std::memcpy(body.data(), message.body(), body.size());
+				}
+				channel_->ack(deliveryTag);
+				if (message.hasCorrelationID()) {
+					pending_.Complete(message.correlationID(), std::move(body));
+				}
+				});
+	}
+
+	void Run()
+	{
+		std::vector<char> receiveBuffer(ReadBufferSize);
+		std::vector<char> pendingBytes;
+		pendingBytes.reserve(ReadBufferSize);
+
+		while (!stopping_.load(std::memory_order_acquire) && !broken_.load(std::memory_order_acquire)) {
+			if (runtimeState_.connectionError.load(std::memory_order_acquire) ||
+				runtimeState_.connectionClosed.load(std::memory_order_acquire)) {
+				Disconnect("RabbitMQ: connection lost");
 				return;
 			}
 
-			const std::size_t bodySize = message.bodySize();
-			rpcState.responsePayload.resize(bodySize);
-			if (bodySize > 0) {
-				std::memcpy(rpcState.responsePayload.data(), message.body(), bodySize);
-			}
-
-			rpcState.responseReceived.store(true, std::memory_order_release);
-			channel.ack(deliveryTag);
-			}).onError([&](const char*) {
-				rpcState.channelError.store(true, std::memory_order_release);
-				});
-
-	std::vector<char> receiveBuffer(ReadBufferSize);
-	std::vector<char> pendingBytes;
-	pendingBytes.reserve(ReadBufferSize);
-	const auto startedAt = std::chrono::steady_clock::now();
-	const auto rpcTimeout = std::chrono::milliseconds(config.rpcTimeoutMs == 0 ? 30000u : config.rpcTimeoutMs);
-
-	while (!runtimeState.connectionClosed.load(std::memory_order_acquire) &&
-		!runtimeState.connectionError.load(std::memory_order_acquire) &&
-		!rpcState.channelError.load(std::memory_order_acquire)) {
-
-		if (runtimeState.connectionReady.load(std::memory_order_acquire) &&
-			rpcState.queueDeclared.load(std::memory_order_acquire) &&
-			rpcState.consumerReady.load(std::memory_order_acquire) &&
-			!rpcState.publishAttempted.load(std::memory_order_acquire)) {
-			const char* body = payloadSize == 0 ? "" : reinterpret_cast<const char*>(payload);
-			AMQP::Envelope envelope(body, payloadSize);
-			envelope.setContentType("application/octet-stream");
-			envelope.setReplyTo(config.replyQueue);
-			envelope.setCorrelationID(rpcState.correlationId);
-
-			const bool publishAccepted = channel.publish("", config.queue, envelope);
-			rpcState.publishAttempted.store(true, std::memory_order_release);
-			rpcState.publishAccepted.store(publishAccepted, std::memory_order_release);
-			if (!publishAccepted) {
-				break;
-			}
-		}
-
-		if ((std::chrono::steady_clock::now() - startedAt) > ConnectionReadyTimeout &&
-			!runtimeState.connectionReady.load(std::memory_order_acquire)) {
-			break;
-		}
-
-		if ((std::chrono::steady_clock::now() - startedAt) > rpcTimeout) {
-			break;
-		}
-
-		if (rpcState.responseReceived.load(std::memory_order_acquire)) {
-			responsePayload = rpcState.responsePayload;
-			break;
-		}
-
-		const WaitStatus waitStatus = WaitForSocketReadable(socket, 500);
-		if (waitStatus == WaitStatus::Timeout) {
-			continue;
-		}
-		if (waitStatus == WaitStatus::Error) {
-			break;
-		}
-
-#ifdef _WIN32
-		const int bytesRead = ::recv(socket, receiveBuffer.data(), static_cast<int>(receiveBuffer.size()), 0);
-#else
-		const ssize_t bytesRead = ::recv(socket, receiveBuffer.data(), receiveBuffer.size(), 0);
-#endif
-		if (bytesRead == 0) {
-			runtimeState.connectionClosed.store(true, std::memory_order_release);
-			break;
-		}
-		if (bytesRead < 0) {
-			if (IsWouldBlockError()) {
+			const WaitStatus waitStatus = WaitForSocketReadable(socket_, 200);
+			if (waitStatus == WaitStatus::Timeout) {
 				continue;
 			}
-			break;
-		}
-
-		const std::size_t chunkSize = static_cast<std::size_t>(bytesRead);
-		pendingBytes.insert(
-			pendingBytes.end(),
-			receiveBuffer.begin(),
-			receiveBuffer.begin() + static_cast<std::ptrdiff_t>(chunkSize));
-
-		while (!pendingBytes.empty()) {
-			const std::uint64_t parsed = connection.parse(pendingBytes.data(), pendingBytes.size());
-			if (parsed == 0 || parsed > pendingBytes.size()) {
-				break;
+			if (waitStatus == WaitStatus::Error) {
+				Disconnect("RabbitMQ: socket error");
+				return;
 			}
-			pendingBytes.erase(
-				pendingBytes.begin(),
-				pendingBytes.begin() + static_cast<std::ptrdiff_t>(parsed));
+
+#ifdef _WIN32
+			const int bytesRead = ::recv(socket_, receiveBuffer.data(), static_cast<int>(receiveBuffer.size()), 0);
+#else
+			const ssize_t bytesRead = ::recv(socket_, receiveBuffer.data(), receiveBuffer.size(), 0);
+#endif
+			if (bytesRead == 0) {
+				Disconnect("RabbitMQ: connection closed by broker");
+				return;
+			}
+			if (bytesRead < 0) {
+				if (IsWouldBlockError()) {
+					continue;
+				}
+				Disconnect("RabbitMQ: socket read failed");
+				return;
+			}
+
+			pendingBytes.insert(
+				pendingBytes.end(),
+				receiveBuffer.begin(),
+				receiveBuffer.begin() + static_cast<std::ptrdiff_t>(bytesRead));
+
+			std::lock_guard<std::mutex> lock(amqpMutex_);
+			while (!pendingBytes.empty()) {
+				const std::uint64_t parsed = connection_->parse(pendingBytes.data(), pendingBytes.size());
+				if (parsed == 0 || parsed > pendingBytes.size()) {
+					break;
+				}
+				pendingBytes.erase(
+					pendingBytes.begin(),
+					pendingBytes.begin() + static_cast<std::ptrdiff_t>(parsed));
+			}
 		}
 	}
 
-	connection.close();
-	CloseSocket(socket);
+	void Disconnect(const std::string& error)
+	{
+		{
+			std::lock_guard<std::mutex> lock(errorMutex_);
+			if (brokenError_.empty()) {
+				brokenError_ = error;
+			}
+		}
+		broken_.store(true, std::memory_order_release);
+		pending_.FailAll(error);
+	}
 
+	std::string BrokenError() const
+	{
+		std::lock_guard<std::mutex> lock(errorMutex_);
+		return brokenError_.empty() ? std::string("RabbitMQ: connection is not available") : brokenError_;
+	}
+
+	void Shutdown()
+	{
+		stopping_.store(true, std::memory_order_release);
+		if (io_.joinable()) {
+			io_.join();
+		}
+		if (connection_) {
+			connection_->close();
+		}
+		channel_.reset();
+		connection_.reset();
+		handler_.reset();
+		if (socket_ != InvalidSocket) {
+			CloseSocket(socket_);
+			socket_ = InvalidSocket;
+		}
 #ifdef _WIN32
-	WSACleanup();
+		if (!wsaCleaned_) {
+			wsaCleaned_ = true;
+			WSACleanup();
+		}
 #endif
+	}
 
-	return rpcState.publishAccepted.load(std::memory_order_acquire) &&
-		rpcState.responseReceived.load(std::memory_order_acquire) &&
-		!runtimeState.connectionError.load(std::memory_order_acquire) &&
-		!rpcState.channelError.load(std::memory_order_acquire);
+	Concurrency::PendingReplies& pending_;
+	std::string queue_;
+	std::string replyQueue_;
+	SocketHandle socket_{ InvalidSocket };
+	RuntimeState runtimeState_{};
+	std::unique_ptr<SocketConnectionHandler> handler_;
+	std::unique_ptr<AMQP::Connection> connection_;
+	std::unique_ptr<AMQP::Channel> channel_;
+	std::mutex amqpMutex_;
+	mutable std::mutex errorMutex_;
+	std::string brokenError_;
+	std::thread io_;
+	std::atomic_bool consumerReady_{ false };
+	std::atomic_bool broken_{ false };
+	std::atomic_bool stopping_{ false };
+#ifdef _WIN32
+	bool wsaCleaned_{ false };
+#endif
+};
+
+RabbitMqRpcClient::RabbitMqRpcClient(RabbitMqClientConfig config)
+	: config_(std::move(config))
+{
+}
+
+RabbitMqRpcClient::~RabbitMqRpcClient()
+{
+	pending_.Close("RabbitMQ client is shutting down");
+	std::lock_guard<std::mutex> lock(linkMutex_);
+	link_.reset();
+}
+
+std::shared_ptr<RabbitMqRpcClient::Link> RabbitMqRpcClient::CurrentLink()
+{
+	std::lock_guard<std::mutex> lock(linkMutex_);
+	if (!link_ || link_->Broken()) {
+		link_.reset();
+		link_ = std::make_shared<Link>(config_, pending_);
+	}
+	return link_;
+}
+
+std::vector<byte> RabbitMqRpcClient::Call(const byte* payload, std::size_t payloadSize)
+{
+	if (config_.queue.empty()) {
+		throw std::runtime_error("RabbitMQ queue is not configured");
+	}
+	if (payloadSize > 0 && payload == nullptr) {
+		throw std::invalid_argument("RabbitMQ client: null payload with non-zero length");
+	}
+
+	const std::shared_ptr<Link> link = CurrentLink();
+	const std::string correlationId = BuildCorrelationId();
+	auto ticket = pending_.Register(correlationId);
+	link->Publish(correlationId, payload, payloadSize);
+
+	const std::uint32_t timeoutMs = config_.rpcTimeoutMs == 0 ? 30000u : config_.rpcTimeoutMs;
+	std::vector<byte> response;
+	if (!ticket.Wait(std::chrono::milliseconds(timeoutMs), response)) {
+		throw std::runtime_error("RabbitMQ RPC timed out after " + std::to_string(timeoutMs)
+			+ " ms waiting for correlation id " + correlationId);
+	}
+	return response;
 }

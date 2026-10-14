@@ -2,6 +2,7 @@
 #include "TransportPluginExports.h"
 
 #include <cstdlib>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -15,6 +16,7 @@ TransportRabbitMq::TransportRabbitMq(std::string host, unsigned short port, std:
 	config_.port = static_cast<std::uint16_t>(port);
 	this->configSource = configSource;
 	RabbitMqClient::ApplyConfigSource(configSource, config_);
+	client_ = std::make_unique<RabbitMqRpcClient>(config_);
 }
 
 int TransportRabbitMq::Initialize(byte callingRuntimeNumber, byte calledRuntimeNumber, byte calledRuntimeVersion)
@@ -31,15 +33,9 @@ std::vector<byte> TransportRabbitMq::SendCommand(byte* messageByteArray, int32_t
 		throw std::runtime_error("invalid RabbitMQ payload");
 	}
 
-	std::vector<byte> responsePayload;
-	const bool sent = RabbitMqClient::SendRpc(
-		config_,
+	std::vector<byte> responsePayload = client_->Call(
 		messageByteArray,
-		static_cast<std::size_t>(messageByteArrayLen),
-		responsePayload);
-	if (!sent) {
-		throw std::runtime_error("failed RabbitMQ request/response");
-	}
+		static_cast<std::size_t>(messageByteArrayLen));
 
 	if (!responsePayload.empty() && responsePayload[0] == static_cast<byte>(255)) {
 		const std::string errorMessage(responsePayload.begin() + 1, responsePayload.end());

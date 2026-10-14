@@ -51,7 +51,6 @@ namespace {
 		std::string host{ "" };
 		std::uint16_t port{ 0 };
 		std::string queue{};
-		std::string replyQueue{};
 		std::string user{ "" };
 		std::string password{ "" };
 		std::string vhost{ "" };
@@ -215,7 +214,6 @@ namespace {
 		config.name = getOptionalString(parsed, "name", config.name);
 		config.host = getOptionalString(parsed, "host", config.host);
 		config.queue = getOptionalString(parsed, "queue", config.queue);
-		config.replyQueue = getOptionalString(parsed, "replyQueue", config.replyQueue);
 		config.user = getOptionalString(parsed, "user", config.user);
 		config.password = getOptionalString(parsed, "password", config.password);
 		config.vhost = getOptionalString(parsed, "vhost", config.vhost);

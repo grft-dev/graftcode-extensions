@@ -1,9 +1,13 @@
 #pragma once
 
+#include "PendingReplies.h"
+
+#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace RdKafka {
@@ -13,6 +17,7 @@ class KafkaConsumer;
 }  // namespace RdKafka
 
 // Client-side RPC over Kafka: produce to request topic, consume correlated reply.
+// call() may run concurrently; one consumer thread dispatches replies by correlation id.
 class KafkaClient {
 public:
     struct Config {
@@ -39,14 +44,21 @@ public:
     std::vector<unsigned char> call(const unsigned char* data, std::size_t len);
 
 private:
+    class DeliveryReports;
+
     void applySecurity(RdKafka::Conf* conf) const;
     void ensureStarted();
+    void dispatchReplies();
 
     Config cfg_;
     std::string instanceId_;
     std::string consumerGroupId_;
+    Graftcode::Plugins::Concurrency::PendingReplies pending_;
+    std::unique_ptr<DeliveryReports> deliveryReports_;
     std::unique_ptr<RdKafka::Producer> producer_;
     std::unique_ptr<RdKafka::KafkaConsumer> consumer_;
-    std::mutex callMutex_;
-    bool started_ = false;
+    std::thread dispatcher_;
+    std::mutex startMutex_;
+    std::atomic<bool> started_{false};
+    std::atomic<bool> stopping_{false};
 };

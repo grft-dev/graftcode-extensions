@@ -3,6 +3,7 @@
 #include "ITransport.h"
 #include "ServiceBusClient.h"
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -20,5 +21,6 @@ namespace Graftcode::Plugins::ServiceBus
 	private:
 		ServiceBusClientConfig config_;
 		std::string configSource;
+		std::unique_ptr<ServiceBusRpcClient> client_;
 	};
 }

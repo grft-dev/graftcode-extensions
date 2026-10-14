@@ -7,7 +7,8 @@
  *  - DestroyTransport
  *  - TransportSendCommand
  *  - TransportFreeBuffer
- *  - SupportsConcurrentRequests (optional; when missing or false, requests on one channel are serialized)
+ *
+ * Plugins must be thread-safe: TransportSendCommand may be called concurrently on one channel.
  *
  * Every buffer returned by the plugin is allocated by the plugin and released with TransportFreeBuffer.
  */
@@ -38,7 +39,7 @@ typedef GraftcodeTransportChannel* (*GraftcodeCreateTransportFn)(const char* ipA
 typedef void (*GraftcodeDestroyTransportFn)(GraftcodeTransportChannel* channel);
 
 /**
- * Sends a request and returns its response.
+ * Sends a request and returns its response. May be called concurrently on one channel.
  * On GRAFTCODE_TRANSPORT_OK, *response and *responseLen hold the response (*response may be null when the length is 0).
  * Otherwise they hold a NUL-terminated error message and its length without the terminator.
  */
@@ -46,9 +47,6 @@ typedef int32_t (*GraftcodeTransportSendCommandFn)(GraftcodeTransportChannel* ch
 
 /** Releases a buffer returned by the plugin. */
 typedef void (*GraftcodeTransportFreeBufferFn)(void* buffer);
-
-/** Returns true when TransportSendCommand may be called concurrently on one channel. */
-typedef bool (*GraftcodeSupportsConcurrentRequestsFn)(void);
 
 #ifdef __cplusplus
 }

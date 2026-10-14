@@ -1,10 +1,13 @@
 #pragma once
 
+#include "PendingReplies.h"
 #include "SqsConfig.h"
 
+#include <atomic>
 #include <cstddef>
 #include <memory>
 #include <mutex>
+#include <thread>
 #include <vector>
 
 namespace Aws::SQS
@@ -28,8 +31,15 @@ namespace Graftcode::Plugins::Sqs
             std::size_t size);
 
     private:
+        void EnsureDispatcher();
+        void DispatchReplies();
+
         SqsConfig config_;
         std::unique_ptr<Aws::SQS::SQSClient> client_;
-        std::mutex callMutex_;
+        Concurrency::PendingReplies pending_;
+        std::thread dispatcher_;
+        std::mutex startMutex_;
+        std::atomic<bool> started_{ false };
+        std::atomic<bool> stopping_{ false };
     };
 }

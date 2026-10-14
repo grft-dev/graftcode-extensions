@@ -51,7 +51,6 @@ RabbitMQ (`rabbitmq/Readme.md`):
   "host": "localhost",
   "port": 5672,
   "queue": "myqueue",
-  "replyQueue": "myqueue.reply",
   "user": "guest",
   "password": "guest",
   "vhost": "/",
