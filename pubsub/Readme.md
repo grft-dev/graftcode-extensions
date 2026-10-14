@@ -1,6 +1,6 @@
 # Google Cloud Pub/Sub plugin
 
-This plugin carries Graftcode Gateway calls over Google Cloud Pub/Sub. It implements `Hypertube::Native::Interfaces::ITransport` and `GraftcodeGateway::IServer`, and exports `CreateTransportChannel` / `DestroyTransportChannel` and `CreateServer` / `DestroyServer`.
+This plugin carries Graftcode Gateway calls over Google Cloud Pub/Sub. It implements `Hypertube::Native::Interfaces::ITransport` and `GraftcodeGateway::IServer`, and exports the transport C ABI `CreateTransport` / `DestroyTransport` / `TransportSendCommand` / `TransportFreeBuffer` (`GraftcodePluginsInterfaces/TransportPluginAbi.h`) and `CreateServer` / `DestroyServer`.
 
 It is written in C++. Dependencies are libcurl, OpenSSL, and nlohmann/json, installed with the same vcpkg toolchain file as the SQS and Service Bus plugins. They are linked into the plugin.
 

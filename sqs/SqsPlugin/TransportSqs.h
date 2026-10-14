@@ -3,10 +3,7 @@
 #include "ITransport.h"
 #include "SqsClient.h"
 
-#include <map>
 #include <memory>
-#include <mutex>
-#include <thread>
 #include <vector>
 
 namespace Graftcode::Plugins::Sqs
@@ -22,17 +19,12 @@ namespace Graftcode::Plugins::Sqs
             byte callingRuntimeNumber,
             byte calledRuntimeNumber,
             byte calledRuntimeVersion) override;
-        int SendCommand(
+        std::vector<byte> SendCommand(
             byte* messageByteArray,
             int32_t messageByteArrayLen) override;
-        int ReadResponse(
-            byte* responseByteArray,
-            int32_t responseByteArrayLen) override;
 
     private:
         std::unique_ptr<SqsClient> client_;
-        std::map<std::thread::id, std::vector<byte>> responses_;
-        std::mutex responsesMutex_;
     };
 
     void RejectGatewayErrorPayload(const std::vector<unsigned char>& payload);

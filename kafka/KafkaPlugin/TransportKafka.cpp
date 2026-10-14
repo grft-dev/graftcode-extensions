@@ -1,10 +1,16 @@
 #include "TransportKafka.h"
 #include "KafkaServer.h"
+#include "TransportPluginExports.h"
 
 #include <nlohmann/json.hpp>
 
+#include <cstddef>
 #include <cstring>
+#include <memory>
+#include <stdexcept>
+#include <string>
 #include <utility>
+#include <vector>
 
 #if defined(_WIN32)
 #define KAFKA_PLUGIN_EXPORT extern "C" __declspec(dllexport)
@@ -65,42 +71,28 @@ TransportKafka::TransportKafka(const char*, unsigned short, const char* configJs
 
 int TransportKafka::Initialize(byte, byte, byte) { return 0; }
 
-int TransportKafka::SendCommand(byte* messageByteArray, int32_t messageByteArrayLen) {
-    std::vector<unsigned char> response =
-        client_->call(messageByteArray, static_cast<std::size_t>(messageByteArrayLen));
-    const int responseSize = static_cast<int>(response.size());
-    std::unique_lock<std::shared_mutex> lock(responseByThreadMutex_);
-    responseByThread_[std::this_thread::get_id()] = std::move(response);
-    return responseSize;
+std::vector<byte> TransportKafka::SendCommand(byte* messageByteArray, int32_t messageByteArrayLen) {
+    std::vector<byte> response = client_->call(messageByteArray, static_cast<std::size_t>(messageByteArrayLen));
+    if (!response.empty() && response.front() == static_cast<byte>(255)) {
+        throw std::runtime_error(std::string(response.begin() + 1, response.end()));
+    }
+    return response;
 }
 
-int TransportKafka::ReadResponse(byte* responseByteArray, int32_t responseByteArrayLen) {
-    std::vector<unsigned char> response;
-    {
-        std::unique_lock<std::shared_mutex> lock(responseByThreadMutex_);
-        const auto it = responseByThread_.find(std::this_thread::get_id());
-        if (it == responseByThread_.end()) {
-            return -1;
-        }
-        response = std::move(it->second);
-        responseByThread_.erase(it);
-    }
-    if (responseByteArrayLen < static_cast<int32_t>(response.size())) {
-        return -1;
-    }
-    if (!response.empty()) {
-        std::memcpy(responseByteArray, response.data(), response.size());
-    }
-    return 0;
+KAFKA_PLUGIN_EXPORT GraftcodeTransportChannel* CreateTransport(const char* ipAddress, unsigned short port, const char* configSource, char** errorMessage) {
+    return Graftcode::Plugins::TransportAbi::CreateTransport([&] { return new TransportKafka(ipAddress, port, configSource); }, errorMessage);
 }
 
-KAFKA_PLUGIN_EXPORT Hypertube::Native::Interfaces::ITransport*
-CreateTransportChannel(const char* ipAddress, const unsigned short port, const char* configSource) {
-    return new TransportKafka(ipAddress, port, configSource);
+KAFKA_PLUGIN_EXPORT void DestroyTransport(GraftcodeTransportChannel* channel) {
+    Graftcode::Plugins::TransportAbi::DestroyTransport(channel);
 }
 
-KAFKA_PLUGIN_EXPORT void DestroyTransportChannel(Hypertube::Native::Interfaces::ITransport* transport) {
-    delete transport;
+KAFKA_PLUGIN_EXPORT int32_t TransportSendCommand(GraftcodeTransportChannel* channel, const unsigned char* message, int32_t messageLen, unsigned char** response, int32_t* responseLen) {
+    return Graftcode::Plugins::TransportAbi::SendCommand(channel, message, messageLen, response, responseLen);
+}
+
+KAFKA_PLUGIN_EXPORT void TransportFreeBuffer(void* buffer) {
+    Graftcode::Plugins::TransportAbi::FreeBuffer(buffer);
 }
 
 KAFKA_PLUGIN_EXPORT GraftcodeGateway::IServer* CreateServer() {

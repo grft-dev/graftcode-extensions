@@ -1,6 +1,6 @@
 # Amazon SQS Plugin
 
-This plugin carries Graftcode Gateway calls over Amazon Simple Queue Service. It implements `Hypertube::Native::Interfaces::ITransport` and `GraftcodeGateway::IServer`, and exports `CreateTransportChannel` / `DestroyTransportChannel` and `CreateServer` / `DestroyServer`.
+This plugin carries Graftcode Gateway calls over Amazon Simple Queue Service. It implements `Hypertube::Native::Interfaces::ITransport` and `GraftcodeGateway::IServer`, and exports the transport C ABI `CreateTransport` / `DestroyTransport` / `TransportSendCommand` / `TransportFreeBuffer` (`GraftcodePluginsInterfaces/TransportPluginAbi.h`) and `CreateServer` / `DestroyServer`.
 
 It is written in C++ and uses the AWS SDK for C++ (`aws-sdk-cpp[sqs]`) plus `nlohmann-json`, both from vcpkg. Both are linked into the plugin.
 

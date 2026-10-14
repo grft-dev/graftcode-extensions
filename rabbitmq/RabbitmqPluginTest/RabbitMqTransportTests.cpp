@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "ITransport.h"
+#include "TransportPluginAbi.h"
 #include "RabbitMqClient.h"
 #include <map>
 #include <shared_mutex>
@@ -14,11 +15,19 @@
 #include <string>
 #include <vector>
 
-extern "C" Hypertube::Native::Interfaces::ITransport* CreateTransportChannel(
+extern "C" GraftcodeTransportChannel* CreateTransport(
 	const char* ipAddress,
 	unsigned short port,
-	const char* configSource);
-extern "C" void DestroyTransportChannel(Hypertube::Native::Interfaces::ITransport* transport);
+	const char* configSource,
+	char** errorMessage);
+extern "C" void DestroyTransport(GraftcodeTransportChannel* channel);
+extern "C" int32_t TransportSendCommand(
+	GraftcodeTransportChannel* channel,
+	const unsigned char* message,
+	int32_t messageLen,
+	unsigned char** response,
+	int32_t* responseLen);
+extern "C" void TransportFreeBuffer(void* buffer);
 
 namespace {
 	const char* kValidClientConfig = R"({
@@ -74,21 +83,6 @@ TEST(RabbitMqTransport, SendCommandRejectsInvalidPayloadArguments) {
 	ExpectInvalidPayload(transport, nullptr, 8);
 	ExpectInvalidPayload(transport, &sample, -5);
 
-	byte buffer[4]{};
-	try {
-		transport.ReadResponse(nullptr, 4);
-		FAIL() << "ReadResponse should reject a null buffer";
-	}
-	catch (const std::runtime_error& error) {
-		EXPECT_STREQ(error.what(), "invalid response buffer");
-	}
-	try {
-		transport.ReadResponse(buffer, 4);
-		FAIL() << "ReadResponse should fail when no response was stored";
-	}
-	catch (const std::runtime_error& error) {
-		EXPECT_STREQ(error.what(), "RabbitMQ response not found for thread");
-	}
 }
 
 TEST(RabbitMqTransport, LiveRoundTrip) {
@@ -101,13 +95,9 @@ TEST(RabbitMqTransport, LiveRoundTrip) {
 		5672,
 		kValidClientConfig);
 	for (int i = 0; i < 300; ++i) {
-		const int responseSize = transport.SendCommand(
+		const std::vector<byte> actualResponse = transport.SendCommand(
 			const_cast<byte*>(kSamplePayload.data()),
 			static_cast<int32_t>(kSamplePayload.size()));
-		std::vector<byte> actualResponse(static_cast<std::size_t>(responseSize));
-		transport.ReadResponse(
-			actualResponse.data(),
-			static_cast<int32_t>(actualResponse.size()));
 		EXPECT_EQ(actualResponse, kReadResponsePayload);
 	}
 }

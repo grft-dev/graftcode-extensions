@@ -1,5 +1,5 @@
 #include "IServer.h"
-#include "ITransport.h"
+#include "TransportPluginAbi.h"
 
 #include <cstdio>
 
@@ -11,12 +11,10 @@
 
 PUBSUB_PLUGIN_IMPORT GraftcodeGateway::IServer* CreateServer();
 PUBSUB_PLUGIN_IMPORT void DestroyServer(GraftcodeGateway::IServer* server);
-PUBSUB_PLUGIN_IMPORT Hypertube::Native::Interfaces::ITransport* CreateTransportChannel(
-    const char* ipAddress,
-    unsigned short port,
-    const char* configSource);
-PUBSUB_PLUGIN_IMPORT void DestroyTransportChannel(
-    Hypertube::Native::Interfaces::ITransport* transport);
+PUBSUB_PLUGIN_IMPORT GraftcodeTransportChannel* CreateTransport(
+    const char* ipAddress, unsigned short port, const char* configSource, char** errorMessage);
+PUBSUB_PLUGIN_IMPORT void DestroyTransport(GraftcodeTransportChannel* channel);
+PUBSUB_PLUGIN_IMPORT void TransportFreeBuffer(void* buffer);
 
 static bool smokeProcess(
     const GraftcodeGateway::IServer::byte*,
@@ -52,18 +50,15 @@ int main()
     server->stop();
     DestroyServer(server);
 
-    Hypertube::Native::Interfaces::ITransport* transport =
-        CreateTransportChannel(nullptr, 0, config);
+    char* errorMessage = nullptr;
+    GraftcodeTransportChannel* transport =
+        CreateTransport(nullptr, 0, config, &errorMessage);
     if (transport == nullptr) {
-        std::puts("FAIL: CreateTransportChannel returned null");
+        std::printf("FAIL: CreateTransport returned null: %s\n", errorMessage != nullptr ? errorMessage : "");
+        TransportFreeBuffer(errorMessage);
         return 1;
     }
-    if (transport->Initialize(1, 2, 1) != 0) {
-        std::puts("FAIL: Initialize returned non-zero");
-        DestroyTransportChannel(transport);
-        return 1;
-    }
-    DestroyTransportChannel(transport);
+    DestroyTransport(transport);
 
     std::puts("PubSubPlugin smoke OK");
     return 0;

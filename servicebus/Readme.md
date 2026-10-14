@@ -3,7 +3,7 @@
 This plugin is the Azure Service Bus counterpart of the RabbitMQ plugin. It implements the
 same graftcode plugin interfaces (`Hypertube::Native::Interfaces::ITransport` for the calling
 runtime and `GraftcodeGateway::IServer` for the gateway) and exposes the same exported
-factory symbols (`CreateTransportChannel` / `DestroyTransportChannel` and
+factory symbols (the transport C ABI `CreateTransport` / `DestroyTransport` / `TransportSendCommand` / `TransportFreeBuffer` (`GraftcodePluginsInterfaces/TransportPluginAbi.h`) and
 `CreateServer` / `DestroyServer`).
 
 It is written in C++ and talks to Azure Service Bus over its native AMQP 1.0 protocol using

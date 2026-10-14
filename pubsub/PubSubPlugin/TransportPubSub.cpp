@@ -1,4 +1,5 @@
 #include "TransportPubSub.h"
+#include "TransportPluginExports.h"
 
 #include "PubSubConfig.h"
 
@@ -28,7 +29,7 @@ namespace Graftcode::Plugins::PubSub
         return 0;
     }
 
-    int TransportPubSub::SendCommand(
+    std::vector<byte> TransportPubSub::SendCommand(
         byte* messageByteArray,
         int32_t messageByteArrayLen)
     {
@@ -43,42 +44,7 @@ namespace Graftcode::Plugins::PubSub
             static_cast<std::size_t>(messageByteArrayLen));
         RejectGatewayErrorPayload(response);
 
-        const int responseSize = static_cast<int>(response.size());
-        {
-            std::lock_guard<std::mutex> lock(responsesMutex_);
-            responses_[std::this_thread::get_id()] = std::move(response);
-        }
-        return responseSize;
-    }
-
-    int TransportPubSub::ReadResponse(
-        byte* responseByteArray,
-        int32_t responseByteArrayLen)
-    {
-        if (responseByteArrayLen < 0 ||
-            (responseByteArrayLen > 0 && responseByteArray == nullptr)) {
-            throw std::invalid_argument(
-                "Pub/Sub transport: invalid response buffer");
-        }
-
-        std::lock_guard<std::mutex> lock(responsesMutex_);
-        const auto response = responses_.find(std::this_thread::get_id());
-        if (response == responses_.end()) {
-            throw std::runtime_error(
-                "Pub/Sub transport: response not found for calling thread");
-        }
-        if (responseByteArrayLen !=
-            static_cast<int32_t>(response->second.size())) {
-            throw std::runtime_error(
-                "Pub/Sub transport: response buffer length mismatch");
-        }
-
-        std::copy(
-            response->second.begin(),
-            response->second.end(),
-            responseByteArray);
-        responses_.erase(response);
-        return 0;
+        return response;
     }
 }
 
@@ -88,17 +54,36 @@ namespace Graftcode::Plugins::PubSub
 #define PUBSUB_PLUGIN_EXPORT extern "C"
 #endif
 
-PUBSUB_PLUGIN_EXPORT Hypertube::Native::Interfaces::ITransport*
-CreateTransportChannel(
+PUBSUB_PLUGIN_EXPORT GraftcodeTransportChannel*
+CreateTransport(
     const char*,
-    const unsigned short,
-    const char* configSource)
+    unsigned short,
+    const char* configSource,
+    char** errorMessage)
 {
-    return new Graftcode::Plugins::PubSub::TransportPubSub(configSource);
+    return Graftcode::Plugins::TransportAbi::CreateTransport(
+        [&] { return new Graftcode::Plugins::PubSub::TransportPubSub(configSource); },
+        errorMessage);
 }
 
-PUBSUB_PLUGIN_EXPORT void DestroyTransportChannel(
-    Hypertube::Native::Interfaces::ITransport* transport)
+PUBSUB_PLUGIN_EXPORT void DestroyTransport(
+    GraftcodeTransportChannel* channel)
 {
-    delete transport;
+    Graftcode::Plugins::TransportAbi::DestroyTransport(channel);
+}
+
+PUBSUB_PLUGIN_EXPORT int32_t TransportSendCommand(
+    GraftcodeTransportChannel* channel,
+    const unsigned char* message,
+    int32_t messageLen,
+    unsigned char** response,
+    int32_t* responseLen)
+{
+    return Graftcode::Plugins::TransportAbi::SendCommand(
+        channel, message, messageLen, response, responseLen);
+}
+
+PUBSUB_PLUGIN_EXPORT void TransportFreeBuffer(void* buffer)
+{
+    Graftcode::Plugins::TransportAbi::FreeBuffer(buffer);
 }

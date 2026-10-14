@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "ITransport.h"
+#include "TransportPluginAbi.h"
 #include "IServer.h"
 #include "ServiceBusClient.h"
 #include "ServiceBusServer.h"
@@ -16,11 +17,19 @@
 #include <thread>
 #include <vector>
 
-extern "C" Hypertube::Native::Interfaces::ITransport* CreateTransportChannel(
+extern "C" GraftcodeTransportChannel* CreateTransport(
 	const char* ipAddress,
 	unsigned short port,
-	const char* configSource);
-extern "C" void DestroyTransportChannel(Hypertube::Native::Interfaces::ITransport* transport);
+	const char* configSource,
+	char** errorMessage);
+extern "C" void DestroyTransport(GraftcodeTransportChannel* channel);
+extern "C" int32_t TransportSendCommand(
+	GraftcodeTransportChannel* channel,
+	const unsigned char* message,
+	int32_t messageLen,
+	unsigned char** response,
+	int32_t* responseLen);
+extern "C" void TransportFreeBuffer(void* buffer);
 
 using Graftcode::Plugins::ServiceBus::ServiceBusClient;
 using Graftcode::Plugins::ServiceBus::ServiceBusClientConfig;
@@ -148,9 +157,11 @@ TEST(ServiceBusClient, PublishOneWayFailsFastWithoutTopic) {
 }
 
 TEST(ServiceBusTransport, FactoryCreatesAndDestroysTransport) {
-	auto* transport = CreateTransportChannel("", 0, kConnectionStringConfig);
-	ASSERT_NE(transport, nullptr);
-	DestroyTransportChannel(transport);
+	char* errorMessage = nullptr;
+	auto* channel = CreateTransport("", 0, kConnectionStringConfig, &errorMessage);
+	ASSERT_NE(channel, nullptr);
+	EXPECT_EQ(errorMessage, nullptr);
+	DestroyTransport(channel);
 }
 
 // Self-contained RPC round-trip against a live Service Bus namespace: starts the
