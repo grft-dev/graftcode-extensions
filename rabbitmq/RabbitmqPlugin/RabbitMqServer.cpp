@@ -447,170 +447,183 @@ void RabbitMqServer::start() {
 			" | Broker: " + config.host + ":" + std::to_string(config.port));
 
 		while (!shouldStop()) {
-			SocketHandle socket = connectSocketToBroker(config);
-			if (socket == kInvalidSocket) {
-				if (!shouldStop()) std::this_thread::sleep_for(std::chrono::seconds(2));
-				continue;
-			}
-
-			setActiveSocket(socket);
-			logInfo("RabbitMQ consumer TCP connection established");
-
-			ConsumerRuntimeState runtimeState{};
-			SocketConnectionHandler handler(socket, runtimeState);
-			AMQP::Connection connection(
-				&handler,
-				AMQP::Login(config.user, config.password),
-				config.vhost.empty() ? "/" : config.vhost);
-			AMQP::Channel channel(&connection);
-
-			channel.onError([&](const char* errorMessage) {
-				runtimeState.connectionError.store(true, std::memory_order_release);
-				throw std::runtime_error(
-					std::string("RabbitMQ consumer channel error: ") + (errorMessage ? errorMessage : "unknown"));
-				});
-
-			channel.setQos(kRabbitMqPrefetchCount);
-			auto& consumer = channel.consume(config.queue);
-			consumer.onSuccess([&](const std::string& consumerTag) {
-				logInfo("RabbitMQ consumer started with tag: " + consumerTag);
-				});
-			consumer.onError([&](const char* errorMessage) {
-				runtimeState.connectionError.store(true, std::memory_order_release);
-				throw std::runtime_error(
-					std::string("RabbitMQ consumer setup failed: ") + (errorMessage ? errorMessage : "unknown"));
-				});
-			consumer.onReceived([&](const AMQP::Message& message, uint64_t deliveryTag, bool /*redelivered*/) {
-				const auto messageSize = message.bodySize();
-				if (messageSize == 0) {
-					logWarn("RabbitMQ consumer: received empty message body");
-					channel.ack(deliveryTag);
-					return;
+			SocketHandle socket = kInvalidSocket;
+			try {
+				socket = connectSocketToBroker(config);
+				if (socket == kInvalidSocket) {
+					if (!shouldStop()) std::this_thread::sleep_for(std::chrono::seconds(2));
+					continue;
 				}
 
-				std::vector<byte> request(messageSize);
-				std::memcpy(request.data(), message.body(), messageSize);
+				setActiveSocket(socket);
+				logInfo("RabbitMQ consumer TCP connection established");
 
-				try {
-					const auto processMessage = currentProcessMessage();
-					if (processMessage == nullptr) {
-						throw std::runtime_error("RabbitMQ consumer: processMessage callback is not configured");
-					}
-					std::vector<byte> response;
-					auto writeResponse = [](void* context, const byte* data, std::size_t size) {
-						auto* out = static_cast<std::vector<byte>*>(context);
-						if (out == nullptr) {
-							return;
-						}
-						if (data == nullptr || size == 0) {
-							out->clear();
-							return;
-						}
-						out->assign(data, data + size);
-					};
-					if (!processMessage(
-						request.data(),
-						request.size(),
-						writeResponse,
-						&response)) {
-						throw std::runtime_error("RabbitMQ consumer: processMessage callback returned failure");
-					}
-					if (!publishResponseIfRequested(channel, message, response)) {
-						// Requeue when response path failed so request can be retried.
-						channel.reject(deliveryTag, AMQP::requeue);
+				ConsumerRuntimeState runtimeState{};
+				SocketConnectionHandler handler(socket, runtimeState);
+				AMQP::Connection connection(
+					&handler,
+					AMQP::Login(config.user, config.password),
+					config.vhost.empty() ? "/" : config.vhost);
+				AMQP::Channel channel(&connection);
+
+				channel.onError([&](const char* errorMessage) {
+					runtimeState.connectionError.store(true, std::memory_order_release);
+					throw std::runtime_error(
+						std::string("RabbitMQ consumer channel error: ") + (errorMessage ? errorMessage : "unknown"));
+					});
+
+				channel.setQos(kRabbitMqPrefetchCount);
+				auto& consumer = channel.consume(config.queue);
+				consumer.onSuccess([&](const std::string& consumerTag) {
+					logInfo("RabbitMQ consumer started with tag: " + consumerTag);
+					});
+				consumer.onError([&](const char* errorMessage) {
+					runtimeState.connectionError.store(true, std::memory_order_release);
+					throw std::runtime_error(
+						std::string("RabbitMQ consumer setup failed: ") + (errorMessage ? errorMessage : "unknown"));
+					});
+				consumer.onReceived([&](const AMQP::Message& message, uint64_t deliveryTag, bool /*redelivered*/) {
+					const auto messageSize = message.bodySize();
+					if (messageSize == 0) {
+						logWarn("RabbitMQ consumer: received empty message body");
+						channel.ack(deliveryTag);
 						return;
 					}
 
-					logDebug(
-						"RabbitMQ consumer: processed message (" + std::to_string(request.size()) +
-						"B), response size: " + std::to_string(response.size()) + "B");
-					if (message.hasReplyTo() && !message.replyTo().empty()) {
+					std::vector<byte> request(messageSize);
+					std::memcpy(request.data(), message.body(), messageSize);
+
+					try {
+						const auto processMessage = currentProcessMessage();
+						if (processMessage == nullptr) {
+							throw std::runtime_error("RabbitMQ consumer: processMessage callback is not configured");
+						}
+						std::vector<byte> response;
+						auto writeResponse = [](void* context, const byte* data, std::size_t size) {
+							auto* out = static_cast<std::vector<byte>*>(context);
+							if (out == nullptr) {
+								return;
+							}
+							if (data == nullptr || size == 0) {
+								out->clear();
+								return;
+							}
+							out->assign(data, data + size);
+						};
+						if (!processMessage(
+							request.data(),
+							request.size(),
+							writeResponse,
+							&response)) {
+							throw std::runtime_error("RabbitMQ consumer: processMessage callback returned failure");
+						}
+						if (!publishResponseIfRequested(channel, message, response)) {
+							// Requeue when response path failed so request can be retried.
+							channel.reject(deliveryTag, AMQP::requeue);
+							return;
+						}
+
 						logDebug(
-							"RabbitMQ consumer: response published to reply_to queue: " + message.replyTo());
+							"RabbitMQ consumer: processed message (" + std::to_string(request.size()) +
+							"B), response size: " + std::to_string(response.size()) + "B");
+						if (message.hasReplyTo() && !message.replyTo().empty()) {
+							logDebug(
+								"RabbitMQ consumer: response published to reply_to queue: " + message.replyTo());
+						}
+						else {
+							logWarn(
+								"RabbitMQ consumer: request has no reply_to, response was not published");
+						}
+						channel.ack(deliveryTag);
 					}
-					else {
-						logWarn(
-							"RabbitMQ consumer: request has no reply_to, response was not published");
+					catch (const std::exception& ex) {
+						throw std::runtime_error(std::string("RabbitMQ consumer: processing failed: ") + ex.what());
+						channel.reject(deliveryTag);
 					}
-					channel.ack(deliveryTag);
-				}
-				catch (const std::exception& ex) {
-					throw std::runtime_error(std::string("RabbitMQ consumer: processing failed: ") + ex.what());
-					channel.reject(deliveryTag);
-				}
-				catch (...) {
-					throw std::runtime_error("RabbitMQ consumer: processing failed with unknown error");
-					channel.reject(deliveryTag);
-				}
-				});
-
-			std::vector<char> receiveBuffer(kReadBufferSize);
-			std::vector<char> pendingBytes;
-			pendingBytes.reserve(kReadBufferSize);
-
-			while (!shouldStop() &&
-				!runtimeState.connectionClosed.load(std::memory_order_acquire) &&
-				!runtimeState.connectionError.load(std::memory_order_acquire)) {
-				const WaitStatus waitStatus = waitForSocketReadable(socket, 1000);
-				if (waitStatus == WaitStatus::Timeout) {
-					continue;
-				}
-				if (waitStatus == WaitStatus::Error) {
-					if (!shouldStop()) {
-						throw std::runtime_error(lastSocketErrorMessage("RabbitMQ consumer: select failed"));
+					catch (...) {
+						throw std::runtime_error("RabbitMQ consumer: processing failed with unknown error");
+						channel.reject(deliveryTag);
 					}
-					runtimeState.connectionError.store(true, std::memory_order_release);
-					break;
-				}
+					});
 
-#ifdef _WIN32
-				const int bytesRead = ::recv(socket, receiveBuffer.data(), static_cast<int>(receiveBuffer.size()), 0);
-#else
-				const ssize_t bytesRead = ::recv(socket, receiveBuffer.data(), receiveBuffer.size(), 0);
-#endif
+				std::vector<char> receiveBuffer(kReadBufferSize);
+				std::vector<char> pendingBytes;
+				pendingBytes.reserve(kReadBufferSize);
 
-				if (bytesRead == 0) {
-					runtimeState.connectionClosed.store(true, std::memory_order_release);
-					break;
-				}
-				if (bytesRead < 0) {
-					if (isWouldBlockError()) {
+				while (!shouldStop() &&
+					!runtimeState.connectionClosed.load(std::memory_order_acquire) &&
+					!runtimeState.connectionError.load(std::memory_order_acquire)) {
+					const WaitStatus waitStatus = waitForSocketReadable(socket, 1000);
+					if (waitStatus == WaitStatus::Timeout) {
 						continue;
 					}
-					if (!shouldStop()) {
-						throw std::runtime_error(lastSocketErrorMessage("RabbitMQ consumer: recv failed"));
-					}
-					runtimeState.connectionError.store(true, std::memory_order_release);
-					break;
-				}
-
-				const size_t chunkSize = static_cast<size_t>(bytesRead);
-				pendingBytes.insert(
-					pendingBytes.end(),
-					receiveBuffer.begin(),
-					receiveBuffer.begin() + static_cast<std::ptrdiff_t>(chunkSize));
-
-				while (!pendingBytes.empty()) {
-					const uint64_t parsed = connection.parse(pendingBytes.data(), pendingBytes.size());
-					if (parsed == 0 || parsed > pendingBytes.size()) {
+					if (waitStatus == WaitStatus::Error) {
+						if (!shouldStop()) {
+							throw std::runtime_error(lastSocketErrorMessage("RabbitMQ consumer: select failed"));
+						}
+						runtimeState.connectionError.store(true, std::memory_order_release);
 						break;
 					}
-					pendingBytes.erase(
-						pendingBytes.begin(),
-						pendingBytes.begin() + static_cast<std::ptrdiff_t>(parsed));
+
+	#ifdef _WIN32
+					const int bytesRead = ::recv(socket, receiveBuffer.data(), static_cast<int>(receiveBuffer.size()), 0);
+	#else
+					const ssize_t bytesRead = ::recv(socket, receiveBuffer.data(), receiveBuffer.size(), 0);
+	#endif
+
+					if (bytesRead == 0) {
+						runtimeState.connectionClosed.store(true, std::memory_order_release);
+						break;
+					}
+					if (bytesRead < 0) {
+						if (isWouldBlockError()) {
+							continue;
+						}
+						if (!shouldStop()) {
+							throw std::runtime_error(lastSocketErrorMessage("RabbitMQ consumer: recv failed"));
+						}
+						runtimeState.connectionError.store(true, std::memory_order_release);
+						break;
+					}
+
+					const size_t chunkSize = static_cast<size_t>(bytesRead);
+					pendingBytes.insert(
+						pendingBytes.end(),
+						receiveBuffer.begin(),
+						receiveBuffer.begin() + static_cast<std::ptrdiff_t>(chunkSize));
+
+					while (!pendingBytes.empty()) {
+						const uint64_t parsed = connection.parse(pendingBytes.data(), pendingBytes.size());
+						if (parsed == 0 || parsed > pendingBytes.size()) {
+							break;
+						}
+						pendingBytes.erase(
+							pendingBytes.begin(),
+							pendingBytes.begin() + static_cast<std::ptrdiff_t>(parsed));
+					}
+				}
+
+				if (runtimeState.connectionError.load(std::memory_order_acquire)) {
+					connection.fail("RabbitMQ consumer connection failure");
+				}
+
+				clearActiveSocket(socket);
+				closeSocket(socket);
+
+				if (!shouldStop()) {
+					logWarn("RabbitMQ consumer disconnected, retrying in 2 seconds");
+					std::this_thread::sleep_for(std::chrono::seconds(2));
 				}
 			}
-
-			if (runtimeState.connectionError.load(std::memory_order_acquire)) {
-				connection.fail("RabbitMQ consumer connection failure");
-			}
-
-			clearActiveSocket(socket);
-			closeSocket(socket);
-
-			if (!shouldStop()) {
-				logWarn("RabbitMQ consumer disconnected, retrying in 2 seconds");
-				std::this_thread::sleep_for(std::chrono::seconds(2));
+			catch (const std::exception& ex) {
+				if (socket != kInvalidSocket) {
+					clearActiveSocket(socket);
+					closeSocket(socket);
+				}
+				if (!shouldStop()) {
+					logWarn(std::string("RabbitMQ consumer error: ") + ex.what() + ", retrying in 2 seconds");
+					std::this_thread::sleep_for(std::chrono::seconds(2));
+				}
 			}
 		}
 
