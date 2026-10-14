@@ -51,7 +51,7 @@ std::vector<byte> TransportRabbitMq::SendCommand(byte* messageByteArray, int32_t
 #define RABBITMQ_PLUGIN_EXPORT extern "C"
 #endif
 
-RABBITMQ_PLUGIN_EXPORT GraftcodeTransportChannel* CreateTransport(const char* ipAddress, unsigned short port, const char* configSource, char** errorMessage)
+RABBITMQ_PLUGIN_EXPORT TransportPluginChannel* CreateTransport(const char* ipAddress, unsigned short port, const char* configSource, char** errorMessage)
 {
 	return Graftcode::Plugins::TransportAbi::CreateTransport(
 		[&] {
@@ -63,12 +63,12 @@ RABBITMQ_PLUGIN_EXPORT GraftcodeTransportChannel* CreateTransport(const char* ip
 		errorMessage);
 }
 
-RABBITMQ_PLUGIN_EXPORT void DestroyTransport(GraftcodeTransportChannel* channel)
+RABBITMQ_PLUGIN_EXPORT void DestroyTransport(TransportPluginChannel* channel)
 {
 	Graftcode::Plugins::TransportAbi::DestroyTransport(channel);
 }
 
-RABBITMQ_PLUGIN_EXPORT int32_t TransportSendCommand(GraftcodeTransportChannel* channel, const unsigned char* message, int32_t messageLen, unsigned char** response, int32_t* responseLen)
+RABBITMQ_PLUGIN_EXPORT int32_t TransportSendCommand(TransportPluginChannel* channel, const unsigned char* message, int32_t messageLen, unsigned char** response, int32_t* responseLen)
 {
 	return Graftcode::Plugins::TransportAbi::SendCommand(channel, message, messageLen, response, responseLen);
 }

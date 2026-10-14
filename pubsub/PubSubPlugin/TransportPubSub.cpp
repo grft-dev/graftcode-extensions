@@ -54,7 +54,7 @@ namespace Graftcode::Plugins::PubSub
 #define PUBSUB_PLUGIN_EXPORT extern "C"
 #endif
 
-PUBSUB_PLUGIN_EXPORT GraftcodeTransportChannel*
+PUBSUB_PLUGIN_EXPORT TransportPluginChannel*
 CreateTransport(
     const char*,
     unsigned short,
@@ -67,13 +67,13 @@ CreateTransport(
 }
 
 PUBSUB_PLUGIN_EXPORT void DestroyTransport(
-    GraftcodeTransportChannel* channel)
+    TransportPluginChannel* channel)
 {
     Graftcode::Plugins::TransportAbi::DestroyTransport(channel);
 }
 
 PUBSUB_PLUGIN_EXPORT int32_t TransportSendCommand(
-    GraftcodeTransportChannel* channel,
+    TransportPluginChannel* channel,
     const unsigned char* message,
     int32_t messageLen,
     unsigned char** response,

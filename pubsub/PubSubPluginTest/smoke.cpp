@@ -11,9 +11,9 @@
 
 PUBSUB_PLUGIN_IMPORT GraftcodeGateway::IServer* CreateServer();
 PUBSUB_PLUGIN_IMPORT void DestroyServer(GraftcodeGateway::IServer* server);
-PUBSUB_PLUGIN_IMPORT GraftcodeTransportChannel* CreateTransport(
+PUBSUB_PLUGIN_IMPORT TransportPluginChannel* CreateTransport(
     const char* ipAddress, unsigned short port, const char* configSource, char** errorMessage);
-PUBSUB_PLUGIN_IMPORT void DestroyTransport(GraftcodeTransportChannel* channel);
+PUBSUB_PLUGIN_IMPORT void DestroyTransport(TransportPluginChannel* channel);
 PUBSUB_PLUGIN_IMPORT void TransportFreeBuffer(void* buffer);
 
 static bool smokeProcess(
@@ -51,7 +51,7 @@ int main()
     DestroyServer(server);
 
     char* errorMessage = nullptr;
-    GraftcodeTransportChannel* transport =
+    TransportPluginChannel* transport =
         CreateTransport(nullptr, 0, config, &errorMessage);
     if (transport == nullptr) {
         std::printf("FAIL: CreateTransport returned null: %s\n", errorMessage != nullptr ? errorMessage : "");
