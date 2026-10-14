@@ -187,14 +187,29 @@ namespace Graftcode::Plugins::PubSub
                     "Pub/Sub server: processMessage callback is not configured");
             }
 
-            PubSubSession session(config);
-            if (config.autoCreate) {
-                session.EnsureTopic(config.requestTopic);
-                session.EnsureSubscription(
-                    config.requestSubscription,
-                    config.requestTopic);
+            std::unique_ptr<PubSubSession> session;
+            while (session == nullptr &&
+                   !stopRequested_.load(std::memory_order_acquire)) {
+                try {
+                    auto candidate = std::make_unique<PubSubSession>(config);
+                    if (config.autoCreate) {
+                        candidate->EnsureTopic(config.requestTopic);
+                        candidate->EnsureSubscription(
+                            config.requestSubscription,
+                            config.requestTopic);
+                    }
+                    session = std::move(candidate);
+                }
+                catch (const std::exception& error) {
+                    if (!stopRequested_.load(std::memory_order_acquire)) {
+                        LogWarn(std::string("setup failed: ") + error.what() +
+                            ", retrying in 2 seconds");
+                        SleepUnlessStopped(
+                            stopRequested_,
+                            std::chrono::seconds(2));
+                    }
+                }
             }
-
             LogInfo(
                 "receiving subscription '" + config.requestSubscription +
                 "' on topic '" + config.requestTopic +
@@ -203,7 +218,7 @@ namespace Graftcode::Plugins::PubSub
 
             while (!stopRequested_.load(std::memory_order_acquire)) {
                 try {
-                    const auto batch = session.Pull(config.requestSubscription, 1);
+                    const auto batch = session->Pull(config.requestSubscription, 1);
                     if (batch.empty()) {
                         SleepUnlessStopped(
                             stopRequested_,
@@ -214,7 +229,7 @@ namespace Graftcode::Plugins::PubSub
                         if (stopRequested_.load(std::memory_order_acquire)) {
                             break;
                         }
-                        HandleMessage(session, config, processMessage, message);
+                        HandleMessage(*session, config, processMessage, message);
                     }
                 }
                 catch (const std::exception& error) {
