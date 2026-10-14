@@ -1,6 +1,6 @@
 # Amazon SQS Plugin
 
-This plugin carries Graftcode Gateway calls over Amazon Simple Queue Service. It implements `Hypertube::Native::Interfaces::ITransport` and `GraftcodeGateway::IServer`, and exports `CreateTransportChannel` / `DestroyTransportChannel` and `CreateServer` / `DestroyServer`.
+This plugin carries Graftcode Gateway calls over Amazon Simple Queue Service. It implements `Hypertube::Native::Interfaces::ITransport` and `GraftcodeGateway::IServer`, and exports the transport C ABI `CreateTransport` / `DestroyTransport` / `TransportSendCommand` / `TransportFreeBuffer` (`GraftcodePluginsInterfaces/TransportPluginAbi.h`) and `CreateServer` / `DestroyServer`.
 
 It is written in C++ and uses the AWS SDK for C++ (`aws-sdk-cpp[sqs]`) plus `nlohmann-json`, both from vcpkg. Both are linked into the plugin.
 
@@ -14,7 +14,7 @@ Binary Graft payloads are Base64-encoded in the SQS message body with the prefix
 ## Pitfalls
 
 - SQS is at-least-once. The gateway deletes a request only after `processMessage` succeeds and, for RPC, the reply has been sent. A failure leaves the message for the visibility timeout, then another receive. Make called operations idempotent, and attach a dead-letter queue for messages that never succeed.
-- SQS cannot filter a receive by message attribute. Give each client process its own reply queue. Do not share one reply queue between independent processes. Calls through one transport instance are serialized.
+- SQS cannot filter a receive by message attribute. Give each client process its own reply queue. Do not share one reply queue between independent processes. Calls through one transport instance may run concurrently; one background receiver dispatches replies by correlation id.
 - Encoded bodies larger than 1 MiB are rejected. Some LocalStack versions and older queues still enforce 256 KiB.
 - Queue URLs and the SDK endpoint are different. `endpointOverride` is where the SDK connects (`http://localhost:4566` for LocalStack). `requestQueueUrl` / `replyQueueUrl` must be the URL the broker returns. LocalStack's working form is `http://sqs.<region>.localhost.localstack.cloud:4566/000000000000/<queue>`, not `http://localhost:4566/000000000000/<queue>`.
 

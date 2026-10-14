@@ -8,11 +8,11 @@
 #include <aws/sqs/model/ReceiveMessageRequest.h>
 #include <aws/sqs/model/SendMessageRequest.h>
 
-#include <algorithm>
 #include <chrono>
-#include <cstdint>
+#include <optional>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <utility>
 
 namespace Graftcode::Plugins::Sqs
@@ -46,7 +46,77 @@ namespace Graftcode::Plugins::Sqs
         client_ = CreateAwsSqsClient(config_);
     }
 
-    SqsClient::~SqsClient() = default;
+    SqsClient::~SqsClient()
+    {
+        stopping_.store(true, std::memory_order_release);
+        pending_.Close("SQS client is shutting down");
+        if (dispatcher_.joinable()) {
+            dispatcher_.join();
+        }
+    }
+
+    void SqsClient::EnsureDispatcher()
+    {
+        if (started_.load(std::memory_order_acquire)) {
+            return;
+        }
+        std::lock_guard<std::mutex> lock(startMutex_);
+        if (started_.load(std::memory_order_acquire)) {
+            return;
+        }
+        dispatcher_ = std::thread(&SqsClient::DispatchReplies, this);
+        started_.store(true, std::memory_order_release);
+    }
+
+    void SqsClient::DispatchReplies()
+    {
+        while (!stopping_.load(std::memory_order_acquire)) {
+            if (!pending_.WaitForPending(std::chrono::milliseconds(200))) {
+                continue;
+            }
+
+            Aws::SQS::Model::ReceiveMessageRequest receive;
+            receive.SetQueueUrl(config_.replyQueueUrl.c_str());
+            receive.SetMaxNumberOfMessages(10);
+            receive.SetWaitTimeSeconds(static_cast<int>(config_.waitTimeSeconds));
+            receive.SetVisibilityTimeout(static_cast<int>(
+                config_.visibilityTimeoutSeconds));
+            receive.AddMessageAttributeNames("All");
+
+            const auto receiveOutcome = client_->ReceiveMessage(receive);
+            if (!receiveOutcome.IsSuccess()) {
+                pending_.FailAll(
+                    AwsError("ReceiveMessage", receiveOutcome.GetError()).what());
+                std::this_thread::sleep_for(std::chrono::milliseconds(200));
+                continue;
+            }
+
+            for (const auto& message : receiveOutcome.GetResult().GetMessages()) {
+                const std::string correlationId =
+                    GetStringAttribute(message, CorrelationIdAttribute);
+
+                // Reply queues are client-instance-dedicated, so replies nobody
+                // waits for are stale and are removed to keep FIFO groups moving.
+                Aws::SQS::Model::DeleteMessageRequest remove;
+                remove.SetQueueUrl(config_.replyQueueUrl.c_str());
+                remove.SetReceiptHandle(message.GetReceiptHandle());
+                const auto deleteOutcome = client_->DeleteMessage(remove);
+                if (!deleteOutcome.IsSuccess()) {
+                    pending_.Fail(
+                        correlationId,
+                        AwsError("DeleteMessage", deleteOutcome.GetError()).what());
+                    continue;
+                }
+
+                try {
+                    pending_.Complete(correlationId, DecodePayload(message.GetBody()));
+                }
+                catch (const std::exception& error) {
+                    pending_.Fail(correlationId, error.what());
+                }
+            }
+        }
+    }
 
     std::vector<unsigned char> SqsClient::Call(
         const unsigned char* data,
@@ -57,13 +127,13 @@ namespace Graftcode::Plugins::Sqs
                 "SQS client: null payload with non-zero length");
         }
 
-        // SQS cannot broker-filter a shared reply queue by correlation id.
-        // Serializing calls keeps one configured reply queue deterministic for
-        // this transport instance. Separate runtime instances should use
-        // separate reply queues.
-        std::lock_guard<std::mutex> lock(callMutex_);
-
         const std::string correlationId = NewCorrelationId();
+        std::optional<Concurrency::PendingReplies::Ticket> ticket;
+        if (!config_.oneWay) {
+            EnsureDispatcher();
+            ticket.emplace(pending_.Register(correlationId));
+        }
+
         Aws::SQS::Model::SendMessageRequest send;
         send.SetQueueUrl(config_.requestQueueUrl.c_str());
         send.SetMessageBody(EncodePayload(data, size));
@@ -90,63 +160,13 @@ namespace Graftcode::Plugins::Sqs
             return {};
         }
 
-        const auto deadline = std::chrono::steady_clock::now() +
-            std::chrono::milliseconds(config_.rpcTimeoutMs);
-        while (std::chrono::steady_clock::now() < deadline) {
-            const auto remainingMs =
-                std::chrono::duration_cast<std::chrono::milliseconds>(
-                    deadline - std::chrono::steady_clock::now()).count();
-            const auto remainingSeconds =
-                static_cast<std::uint32_t>(std::max<std::int64_t>(
-                    0,
-                    remainingMs / 1000));
-
-            Aws::SQS::Model::ReceiveMessageRequest receive;
-            receive.SetQueueUrl(config_.replyQueueUrl.c_str());
-            receive.SetMaxNumberOfMessages(10);
-            receive.SetWaitTimeSeconds(static_cast<int>(
-                (std::min)(config_.waitTimeSeconds, remainingSeconds)));
-            receive.SetVisibilityTimeout(static_cast<int>(
-                config_.visibilityTimeoutSeconds));
-            receive.AddMessageAttributeNames("All");
-
-            const auto receiveOutcome = client_->ReceiveMessage(receive);
-            if (!receiveOutcome.IsSuccess()) {
-                throw AwsError("ReceiveMessage", receiveOutcome.GetError());
-            }
-
-            for (const auto& message : receiveOutcome.GetResult().GetMessages()) {
-                const auto deleteReply = [&]() {
-                    Aws::SQS::Model::DeleteMessageRequest remove;
-                    remove.SetQueueUrl(config_.replyQueueUrl.c_str());
-                    remove.SetReceiptHandle(message.GetReceiptHandle());
-                    const auto deleteOutcome = client_->DeleteMessage(remove);
-                    if (!deleteOutcome.IsSuccess()) {
-                        throw AwsError(
-                            "DeleteMessage",
-                            deleteOutcome.GetError());
-                    }
-                };
-
-                if (GetStringAttribute(
-                        message,
-                        CorrelationIdAttribute) != correlationId) {
-                    // Reply queues are required to be client-instance-dedicated.
-                    // Remove stale responses so they cannot block a FIFO group.
-                    deleteReply();
-                    continue;
-                }
-
-                std::vector<unsigned char> response =
-                    DecodePayload(message.GetBody());
-                deleteReply();
-                return response;
-            }
+        std::vector<unsigned char> response;
+        if (!ticket->Wait(std::chrono::milliseconds(config_.rpcTimeoutMs), response)) {
+            throw std::runtime_error(
+                "SQS RPC timed out after " +
+                std::to_string(config_.rpcTimeoutMs) +
+                " ms waiting for correlation id " + correlationId);
         }
-
-        throw std::runtime_error(
-            "SQS RPC timed out after " +
-            std::to_string(config_.rpcTimeoutMs) +
-            " ms waiting for correlation id " + correlationId);
+        return response;
     }
 }

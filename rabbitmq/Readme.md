@@ -1,6 +1,6 @@
 # RabbitMQ Plugin
 
-This plugin carries Graftcode Gateway calls over RabbitMQ (AMQP 0-9-1). It implements `Hypertube::Native::Interfaces::ITransport` and `GraftcodeGateway::IServer`, and exports `CreateTransportChannel` / `DestroyTransportChannel` and `CreateServer` / `DestroyServer`.
+This plugin carries Graftcode Gateway calls over RabbitMQ (AMQP 0-9-1). It implements `Hypertube::Native::Interfaces::ITransport` and `GraftcodeGateway::IServer`, and exports the transport C ABI `CreateTransport` / `DestroyTransport` / `TransportSendCommand` / `TransportFreeBuffer` (`GraftcodePluginsInterfaces/TransportPluginAbi.h`) and `CreateServer` / `DestroyServer`.
 
 It is written in C++. CMake FetchContent builds [AMQP-CPP](https://github.com/CopernicaMarketingSoftware/AMQP-CPP) `v4.3.27` and nlohmann/json `v3.12.0` into the plugin. There is no vcpkg manifest.
 
@@ -40,7 +40,7 @@ docker build -t graftcode-rabbitmq .
 docker run -d --name graftcode-rabbitmq -p 5672:5672 -p 15672:15672 graftcode-rabbitmq
 ```
 
-Create `myqueue` and `myqueue.reply`.
+Create `myqueue`. Each client declares its own exclusive reply queue and names it in `reply-to`, so no reply queue needs to be created.
 
 Management UI at `http://localhost:15672` (`guest` / `guest`): **Queues and Streams** → **Add a new queue**.
 
@@ -48,7 +48,6 @@ Or:
 
 ```bash
 docker exec -it graftcode-rabbitmq rabbitmqadmin declare queue name=myqueue durable=true
-docker exec -it graftcode-rabbitmq rabbitmqadmin declare queue name=myqueue.reply durable=true
 ```
 
 ## Gateway
@@ -61,7 +60,6 @@ docker exec -it graftcode-rabbitmq rabbitmqadmin declare queue name=myqueue.repl
   "host": "localhost",
   "port": 5672,
   "queue": "myqueue",
-  "replyQueue": "myqueue.reply",
   "user": "guest",
   "password": "guest",
   "vhost": "/",
@@ -88,7 +86,6 @@ A .NET client can call the gateway through the Hypertube SDK. The client config 
         "host": "localhost",
         "port": 5673,
         "queue": "myqueue",
-        "replyQueue": "myqueue.reply",
         "user": "graftcode",
         "password": "graftcode",
         "vhost": "/",
@@ -119,7 +116,6 @@ var result = rtmCtx.GetType("netapp.Calculator").CreateInstance()
 | `host` | yes | Broker hostname. |
 | `port` | yes | AMQP port. `5672` for the Docker image. |
 | `queue` | yes | Request queue. |
-| `replyQueue` | yes (client) | Queue named by `reply-to`. The gateway reads it from the message. |
 | `user` | yes | AMQP username. |
 | `password` | no | AMQP password. |
 | `vhost` | no | Virtual host. Empty means `/`. |

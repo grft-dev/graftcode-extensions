@@ -21,6 +21,7 @@
 #include <limits>
 #include <mutex>
 #include <optional>
+#include <stdexcept>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -42,7 +43,6 @@ namespace
 	// specific session. Matches the value used by the official .NET/Java SDKs.
 	constexpr const char* SessionFilterName = "com.microsoft:session-filter";
 
-	std::recursive_mutex callMutex_;
 	std::atomic<std::uint64_t> correlationCounter_{ 0 };
 
 	std::string BuildCorrelationId()
@@ -258,65 +258,13 @@ bool ServiceBusClient::PublishOneWay(
 	const byte* payload,
 	std::size_t payloadSize)
 {
-	std::lock_guard<std::recursive_mutex> callLock(callMutex_);
 	if (config.topic.empty()) {
 		return false;
 	}
-	if (payloadSize > 0 && payload == nullptr) {
-		return false;
-	}
-
-	const std::string connectionString = BuildConnectionString(config);
-	if (connectionString.empty()) {
-		return false;
-	}
-
 	try {
-		auto credential = std::make_shared<Amqp::ServiceBusSasConnectionStringCredential>(connectionString);
-
-		Amqp::ConnectionOptions connectionOptions;
-		connectionOptions.ContainerId = "graftcode-servicebus-client";
-		connectionOptions.EnableTrace = false;
-		const std::uint16_t credentialPort = credential->GetPort();
-		connectionOptions.Port = credentialPort != 0 ? credentialPort : Amqp::AmqpTlsPort;
-
-		Amqp::Connection connection(credential->GetHostName(), credential, connectionOptions);
-
-		Amqp::SessionOptions sessionOptions;
-		sessionOptions.InitialIncomingWindowSize = (std::numeric_limits<std::int32_t>::max)();
-		sessionOptions.InitialOutgoingWindowSize = (std::numeric_limits<std::uint16_t>::max)();
-		Amqp::Session session(connection.CreateSession(sessionOptions));
-
-		Amqp::MessageSenderOptions senderOptions;
-		senderOptions.Name = "graftcode-oneway-publish";
-		senderOptions.MessageSource = "graftcode-oneway-publish-source";
-		senderOptions.SettleMode = Amqp::SenderSettleMode::Settled;
-		senderOptions.MaxMessageSize = MaxMessageSize;
-		Amqp::MessageSender sender(session.CreateMessageSender(config.topic, senderOptions, nullptr));
-
-		if (auto openError = sender.Open()) {
-			(void)openError;
-			return false;
-		}
-
-		AmqpModels::AmqpMessage message;
-		std::vector<std::uint8_t> body;
-		if (payloadSize > 0) {
-			body.assign(payload, payload + payloadSize);
-		}
-		message.SetBody(AmqpModels::AmqpBinaryData(body));
-		message.Properties.MessageId = AmqpModels::AmqpValue(BuildCorrelationId());
-		message.Properties.ContentType = std::string("application/octet-stream");
-
-		bool sendSucceeded = false;
-#if defined(ENABLE_RUST_AMQP) && ENABLE_RUST_AMQP
-		sendSucceeded = !static_cast<bool>(sender.Send(message));
-#else
-		const auto sendResult = sender.Send(message);
-		sendSucceeded = std::get<0>(sendResult) == Amqp::MessageSendStatus::Ok;
-#endif
-		sender.Close();
-		return sendSucceeded;
+		ServiceBusRpcClient client(config);
+		client.Call(payload, payloadSize);
+		return true;
 	}
 	catch (...) {
 		return false;
@@ -338,151 +286,247 @@ bool ServiceBusClient::SendRpc(
 	std::size_t payloadSize,
 	std::vector<byte>& responsePayload)
 {
-	std::lock_guard<std::recursive_mutex> callLock(callMutex_);
 	responsePayload.clear();
-
-	// One-way (topic) mode: publish and return immediately without a reply.
-	// Used for void methods that produce no result.
-	if (!config.topic.empty()) {
-		return PublishOneWay(config, payload, payloadSize);
-	}
-
-	if (config.queue.empty()) {
-		return false;
-	}
-	if (config.replyQueue.empty()) {
-		return false;
-	}
-	if (payloadSize > 0 && payload == nullptr) {
-		return false;
-	}
-
-	const std::string connectionString = BuildConnectionString(config);
-	if (connectionString.empty()) {
-		return false;
-	}
-
 	try {
-		auto credential = std::make_shared<Amqp::ServiceBusSasConnectionStringCredential>(connectionString);
-
-		Amqp::ConnectionOptions connectionOptions;
-		connectionOptions.ContainerId = "graftcode-servicebus-client";
-		connectionOptions.EnableTrace = false;
-		const std::uint16_t credentialPort = credential->GetPort();
-		connectionOptions.Port = credentialPort != 0 ? credentialPort : Amqp::AmqpTlsPort;
-
-		Amqp::Connection connection(credential->GetHostName(), credential, connectionOptions);
-
-		Amqp::SessionOptions sessionOptions;
-		sessionOptions.InitialIncomingWindowSize = (std::numeric_limits<std::int32_t>::max)();
-		sessionOptions.InitialOutgoingWindowSize = (std::numeric_limits<std::uint16_t>::max)();
-		Amqp::Session session(connection.CreateSession(sessionOptions));
-
-		const std::string correlationId = BuildCorrelationId();
-		// Each request gets a unique reply session id. The reply queue is session
-		// enabled, so the broker routes the matching response back to this exact
-		// client even when many clients share the same reply queue.
-		const std::string replySessionId = correlationId;
-
-		// Attach the reply receiver with a Service Bus session filter so it only
-		// ever sees the response that belongs to this request's session.
-		AmqpModels::_internal::MessageSourceOptions replySourceOptions;
-		replySourceOptions.Address = AmqpModels::AmqpValue(config.replyQueue);
-		AmqpModels::AmqpMap sessionFilter;
-		sessionFilter[AmqpModels::AmqpSymbol(SessionFilterName).AsAmqpValue()]
-			= AmqpModels::AmqpValue(replySessionId);
-		replySourceOptions.Filter = sessionFilter;
-		AmqpModels::_internal::MessageSource replySource(replySourceOptions);
-
-		Amqp::MessageReceiverOptions receiverOptions;
-		receiverOptions.Name = "graftcode-rpc-reply";
-		receiverOptions.MessageTarget = "graftcode-rpc-reply-target";
-		receiverOptions.SettleMode = Amqp::ReceiverSettleMode::First;
-		receiverOptions.MaxMessageSize = MaxMessageSize;
-		receiverOptions.MaxLinkCredit = 10;
-		Amqp::MessageReceiver receiver(session.CreateMessageReceiver(replySource, receiverOptions, nullptr));
-
-		Amqp::MessageSenderOptions senderOptions;
-		senderOptions.Name = "graftcode-rpc-request";
-		senderOptions.MessageSource = "graftcode-rpc-request-source";
-		senderOptions.SettleMode = Amqp::SenderSettleMode::Settled;
-		senderOptions.MaxMessageSize = MaxMessageSize;
-		Amqp::MessageSender sender(session.CreateMessageSender(config.queue, senderOptions, nullptr));
-
-		receiver.Open();
-		if (auto openError = sender.Open()) {
-			(void)openError;
-			receiver.Close();
-			return false;
-		}
-
-		AmqpModels::AmqpMessage message;
-		std::vector<std::uint8_t> body;
-		if (payloadSize > 0) {
-			body.assign(payload, payload + payloadSize);
-		}
-		message.SetBody(AmqpModels::AmqpBinaryData(body));
-		message.Properties.MessageId = AmqpModels::AmqpValue(correlationId);
-		message.Properties.ReplyTo = AmqpModels::AmqpValue(config.replyQueue);
-		// ReplyToGroupId maps to the Service Bus ReplyToSessionId: it tells the
-		// server which session id to stamp on the response.
-		message.Properties.ReplyToGroupId = replySessionId;
-		message.Properties.ContentType = std::string("application/octet-stream");
-
-		bool sendSucceeded = false;
-#if defined(ENABLE_RUST_AMQP) && ENABLE_RUST_AMQP
-		sendSucceeded = !static_cast<bool>(sender.Send(message));
-#else
-		const auto sendResult = sender.Send(message);
-		sendSucceeded = std::get<0>(sendResult) == Amqp::MessageSendStatus::Ok;
-#endif
-		if (!sendSucceeded) {
-			receiver.Close();
-			sender.Close();
-			return false;
-		}
-
-		const std::uint32_t timeoutMs = config.rpcTimeoutMs == 0 ? DefaultRpcTimeoutMs : config.rpcTimeoutMs;
-		const auto deadline = std::chrono::system_clock::now() + std::chrono::milliseconds(timeoutMs);
-		Azure::Core::Context context = Azure::Core::Context{}.WithDeadline(Azure::DateTime(deadline));
-
-		const AmqpModels::AmqpValue expectedCorrelation(correlationId);
-		bool received = false;
-		while (std::chrono::system_clock::now() < deadline) {
-			std::pair<std::shared_ptr<const AmqpModels::AmqpMessage>, Azure::Core::Amqp::Models::_internal::AmqpError> incoming;
-			try {
-				incoming = receiver.WaitForIncomingMessage(context);
-			}
-			catch (...) {
-				break;
-			}
-
-			if (incoming.second) {
-				break;
-			}
-			const auto& incomingMessage = incoming.first;
-			if (!incomingMessage) {
-				continue;
-			}
-
-			const bool correlationMatches =
-				incomingMessage->Properties.CorrelationId == expectedCorrelation
-				|| incomingMessage->Properties.MessageId == expectedCorrelation;
-			if (!correlationMatches) {
-				continue;
-			}
-
-			responsePayload = ExtractMessageBody(*incomingMessage);
-			received = true;
-			break;
-		}
-
-		receiver.Close();
-		sender.Close();
-		return received;
+		ServiceBusRpcClient client(config);
+		responsePayload = client.Call(payload, payloadSize);
+		return true;
 	}
 	catch (...) {
 		responsePayload.clear();
 		return false;
 	}
+}
+
+// One AMQP connection with a request sender and, in RPC mode, a reply receiver bound to the
+// client's reply session. A background thread dispatches replies by correlation id.
+class ServiceBusRpcClient::Link
+{
+public:
+	Link(const ServiceBusClientConfig& config, const std::string& replySessionId, Concurrency::PendingReplies& pending)
+		: pending_(pending)
+	{
+		const std::string connectionString = ServiceBusClient::BuildConnectionString(config);
+		if (connectionString.empty()) {
+			throw std::runtime_error("Service Bus connection string is not configured");
+		}
+		const bool oneWay = !config.topic.empty();
+		if (!oneWay && (config.queue.empty() || config.replyQueue.empty())) {
+			throw std::runtime_error("Service Bus queue and replyQueue must be configured");
+		}
+
+		auto credential = std::make_shared<Amqp::ServiceBusSasConnectionStringCredential>(connectionString);
+		Amqp::ConnectionOptions connectionOptions;
+		connectionOptions.ContainerId = "graftcode-servicebus-client";
+		connectionOptions.EnableTrace = false;
+		const std::uint16_t credentialPort = credential->GetPort();
+		connectionOptions.Port = credentialPort != 0 ? credentialPort : Amqp::AmqpTlsPort;
+		connection_ = std::make_unique<Amqp::Connection>(credential->GetHostName(), credential, connectionOptions);
+
+		Amqp::SessionOptions sessionOptions;
+		sessionOptions.InitialIncomingWindowSize = (std::numeric_limits<std::int32_t>::max)();
+		sessionOptions.InitialOutgoingWindowSize = (std::numeric_limits<std::uint16_t>::max)();
+		session_ = std::make_unique<Amqp::Session>(connection_->CreateSession(sessionOptions));
+
+		if (!oneWay) {
+			// The reply queue is session enabled; the server stamps the reply session id on every
+			// response, so this receiver sees exactly the replies addressed to this client.
+			AmqpModels::_internal::MessageSourceOptions replySourceOptions;
+			replySourceOptions.Address = AmqpModels::AmqpValue(config.replyQueue);
+			AmqpModels::AmqpMap sessionFilter;
+			sessionFilter[AmqpModels::AmqpSymbol(SessionFilterName).AsAmqpValue()]
+				= AmqpModels::AmqpValue(replySessionId);
+			replySourceOptions.Filter = sessionFilter;
+			AmqpModels::_internal::MessageSource replySource(replySourceOptions);
+
+			Amqp::MessageReceiverOptions receiverOptions;
+			receiverOptions.Name = "graftcode-rpc-reply";
+			receiverOptions.MessageTarget = "graftcode-rpc-reply-target";
+			receiverOptions.SettleMode = Amqp::ReceiverSettleMode::First;
+			receiverOptions.MaxMessageSize = MaxMessageSize;
+			receiverOptions.MaxLinkCredit = 100;
+			receiver_ = std::make_unique<Amqp::MessageReceiver>(
+				session_->CreateMessageReceiver(replySource, receiverOptions, nullptr));
+			receiver_->Open();
+		}
+
+		Amqp::MessageSenderOptions senderOptions;
+		senderOptions.Name = oneWay ? "graftcode-oneway-publish" : "graftcode-rpc-request";
+		senderOptions.MessageSource = oneWay ? "graftcode-oneway-publish-source" : "graftcode-rpc-request-source";
+		senderOptions.SettleMode = Amqp::SenderSettleMode::Settled;
+		senderOptions.MaxMessageSize = MaxMessageSize;
+		sender_ = std::make_unique<Amqp::MessageSender>(
+			session_->CreateMessageSender(oneWay ? config.topic : config.queue, senderOptions, nullptr));
+		if (auto openError = sender_->Open()) {
+			(void)openError;
+			if (receiver_) {
+				receiver_->Close();
+			}
+			throw std::runtime_error("failed to open Service Bus sender");
+		}
+
+		if (receiver_) {
+			dispatcher_ = std::thread(&Link::DispatchReplies, this);
+		}
+	}
+
+	~Link()
+	{
+		stopping_.store(true, std::memory_order_release);
+		if (dispatcher_.joinable()) {
+			dispatcher_.join();
+		}
+		try {
+			if (receiver_) {
+				receiver_->Close();
+			}
+			sender_->Close();
+		}
+		catch (...) {
+		}
+	}
+
+	Link(const Link&) = delete;
+	Link& operator=(const Link&) = delete;
+
+	bool Broken() const
+	{
+		return broken_.load(std::memory_order_acquire);
+	}
+
+	void Send(const AmqpModels::AmqpMessage& message)
+	{
+		bool sendSucceeded = false;
+		{
+			std::lock_guard<std::mutex> lock(sendMutex_);
+#if defined(ENABLE_RUST_AMQP) && ENABLE_RUST_AMQP
+			sendSucceeded = !static_cast<bool>(sender_->Send(message));
+#else
+			const auto sendResult = sender_->Send(message);
+			sendSucceeded = std::get<0>(sendResult) == Amqp::MessageSendStatus::Ok;
+#endif
+		}
+		if (!sendSucceeded) {
+			broken_.store(true, std::memory_order_release);
+			throw std::runtime_error("failed to send Service Bus message");
+		}
+	}
+
+private:
+	void DispatchReplies()
+	{
+		while (!stopping_.load(std::memory_order_acquire)) {
+			const auto deadline = std::chrono::system_clock::now() + ReceivePollInterval;
+			Azure::Core::Context context = Azure::Core::Context{}.WithDeadline(Azure::DateTime(deadline));
+			std::pair<std::shared_ptr<const AmqpModels::AmqpMessage>, AmqpModels::_internal::AmqpError> incoming;
+			try {
+				incoming = receiver_->WaitForIncomingMessage(context);
+			}
+			catch (const Azure::Core::OperationCancelledException&) {
+				continue;
+			}
+			catch (const std::exception& error) {
+				Disconnect(std::string("Service Bus reply receiver failed: ") + error.what());
+				return;
+			}
+			if (incoming.second) {
+				Disconnect("Service Bus reply receiver failed: " + incoming.second.Description);
+				return;
+			}
+			if (!incoming.first) {
+				continue;
+			}
+
+			const auto& properties = incoming.first->Properties;
+			const auto& correlation = properties.CorrelationId.IsNull() ? properties.MessageId : properties.CorrelationId;
+			if (correlation.IsNull()) {
+				continue;
+			}
+			try {
+				pending_.Complete(static_cast<std::string>(correlation), ExtractMessageBody(*incoming.first));
+			}
+			catch (...) {
+			}
+		}
+	}
+
+	void Disconnect(const std::string& error)
+	{
+		broken_.store(true, std::memory_order_release);
+		pending_.FailAll(error);
+	}
+
+	static constexpr std::chrono::milliseconds ReceivePollInterval{ 500 };
+
+	Concurrency::PendingReplies& pending_;
+	std::unique_ptr<Amqp::Connection> connection_;
+	std::unique_ptr<Amqp::Session> session_;
+	std::unique_ptr<Amqp::MessageReceiver> receiver_;
+	std::unique_ptr<Amqp::MessageSender> sender_;
+	std::mutex sendMutex_;
+	std::thread dispatcher_;
+	std::atomic_bool stopping_{ false };
+	std::atomic_bool broken_{ false };
+};
+
+ServiceBusRpcClient::ServiceBusRpcClient(ServiceBusClientConfig config)
+	: config_(std::move(config)), replySessionId_(BuildCorrelationId())
+{
+}
+
+ServiceBusRpcClient::~ServiceBusRpcClient()
+{
+	pending_.Close("Service Bus client is shutting down");
+	std::lock_guard<std::mutex> lock(linkMutex_);
+	link_.reset();
+}
+
+std::shared_ptr<ServiceBusRpcClient::Link> ServiceBusRpcClient::CurrentLink()
+{
+	std::lock_guard<std::mutex> lock(linkMutex_);
+	if (!link_ || link_->Broken()) {
+		link_.reset();
+		link_ = std::make_shared<Link>(config_, replySessionId_, pending_);
+	}
+	return link_;
+}
+
+std::vector<byte> ServiceBusRpcClient::Call(const byte* payload, std::size_t payloadSize)
+{
+	if (payloadSize > 0 && payload == nullptr) {
+		throw std::invalid_argument("Service Bus client: null payload with non-zero length");
+	}
+
+	const std::shared_ptr<Link> link = CurrentLink();
+	const bool oneWay = !config_.topic.empty();
+	const std::string correlationId = BuildCorrelationId();
+
+	AmqpModels::AmqpMessage message;
+	std::vector<std::uint8_t> body;
+	if (payloadSize > 0) {
+		body.assign(payload, payload + payloadSize);
+	}
+	message.SetBody(AmqpModels::AmqpBinaryData(body));
+	message.Properties.MessageId = AmqpModels::AmqpValue(correlationId);
+	message.Properties.ContentType = std::string("application/octet-stream");
+
+	if (oneWay) {
+		link->Send(message);
+		return {};
+	}
+
+	message.Properties.ReplyTo = AmqpModels::AmqpValue(config_.replyQueue);
+	// ReplyToGroupId maps to the Service Bus ReplyToSessionId: the server stamps it on the response.
+	message.Properties.ReplyToGroupId = replySessionId_;
+
+	auto ticket = pending_.Register(correlationId);
+	link->Send(message);
+
+	const std::uint32_t timeoutMs = config_.rpcTimeoutMs == 0 ? DefaultRpcTimeoutMs : config_.rpcTimeoutMs;
+	std::vector<byte> response;
+	if (!ticket.Wait(std::chrono::milliseconds(timeoutMs), response)) {
+		throw std::runtime_error("Service Bus RPC timed out after " + std::to_string(timeoutMs)
+			+ " ms waiting for correlation id " + correlationId);
+	}
+	return response;
 }

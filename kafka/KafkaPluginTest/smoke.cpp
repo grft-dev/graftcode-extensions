@@ -1,5 +1,5 @@
 #include "IServer.h"
-#include "ITransport.h"
+#include "TransportPluginAbi.h"
 
 #include <cstdio>
 #include <cstring>
@@ -12,9 +12,10 @@
 
 KAFKA_PLUGIN_IMPORT GraftcodeGateway::IServer* CreateServer();
 KAFKA_PLUGIN_IMPORT void DestroyServer(GraftcodeGateway::IServer* server);
-KAFKA_PLUGIN_IMPORT Hypertube::Native::Interfaces::ITransport* CreateTransportChannel(
-    const char* ipAddress, unsigned short port, const char* configSource);
-KAFKA_PLUGIN_IMPORT void DestroyTransportChannel(Hypertube::Native::Interfaces::ITransport* transport);
+KAFKA_PLUGIN_IMPORT GraftcodeTransportChannel* CreateTransport(
+    const char* ipAddress, unsigned short port, const char* configSource, char** errorMessage);
+KAFKA_PLUGIN_IMPORT void DestroyTransport(GraftcodeTransportChannel* channel);
+KAFKA_PLUGIN_IMPORT void TransportFreeBuffer(void* buffer);
 
 static bool g_processCalled = false;
 
@@ -44,18 +45,15 @@ int main() {
     // Do not start() — that would spin a reconnect loop against a missing broker.
     DestroyServer(server);
 
-    Hypertube::Native::Interfaces::ITransport* transport =
-        CreateTransportChannel("127.0.0.1", 0, cfg);
-    if (!transport) {
-        std::puts("FAIL: CreateTransportChannel returned null");
+    char* errorMessage = nullptr;
+    GraftcodeTransportChannel* transport =
+        CreateTransport("127.0.0.1", 0, cfg, &errorMessage);
+    if (transport == nullptr) {
+        std::printf("FAIL: CreateTransport returned null: %s\n", errorMessage != nullptr ? errorMessage : "");
+        TransportFreeBuffer(errorMessage);
         return 1;
     }
-    if (transport->Initialize(1, 2, 1) != 0) {
-        std::puts("FAIL: Initialize returned non-zero");
-        DestroyTransportChannel(transport);
-        return 1;
-    }
-    DestroyTransportChannel(transport);
+    DestroyTransport(transport);
 
     std::puts("KafkaPlugin smoke OK — factories linked; run against local Kafka to exercise RPC");
     return 0;

@@ -3,10 +3,8 @@
 #include "ITransport.h"
 #include "RabbitMqClient.h"
 
-#include <map>
-#include <shared_mutex>
+#include <memory>
 #include <string>
-#include <thread>
 #include <vector>
 
 namespace Graftcode::Plugins::Rabbitmq
@@ -18,13 +16,11 @@ namespace Graftcode::Plugins::Rabbitmq
 		~TransportRabbitMq() override = default;
 
 		int Initialize(byte callingRuntimeNumber, byte calledRuntimeNumber, byte calledRuntimeVersion) override;
-		int SendCommand(byte* messageByteArray, int32_t messageByteArrayLen) override;
-		int ReadResponse(byte* responseByteArray, int32_t responseByteArrayLen) override;
+		std::vector<byte> SendCommand(byte* messageByteArray, int32_t messageByteArrayLen) override;
 
 	private:
 		RabbitMqClientConfig config_;
 		std::string configSource;
-		std::map<std::thread::id, std::vector<byte>> responseByThread_;
-		std::shared_mutex responseByThreadMutex_;
+		std::unique_ptr<RabbitMqRpcClient> client_;
 	};
 }

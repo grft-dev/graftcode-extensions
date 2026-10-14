@@ -1,10 +1,13 @@
 #pragma once
 
+#include "PendingReplies.h"
 #include "PubSubConfig.h"
 
+#include <atomic>
 #include <cstddef>
 #include <memory>
 #include <mutex>
+#include <thread>
 #include <vector>
 
 namespace Graftcode::Plugins::PubSub
@@ -25,11 +28,19 @@ namespace Graftcode::Plugins::PubSub
             std::size_t size);
 
     private:
-        void EnsureResources();
+        void EnsureStarted();
+        void DispatchReplies();
+        std::unique_ptr<PubSubSession> AcquireSession();
+        void ReleaseSession(std::unique_ptr<PubSubSession> session);
 
         PubSubConfig config_;
-        std::unique_ptr<PubSubSession> session_;
-        bool resourcesReady_{ false };
-        std::mutex callMutex_;
+        Concurrency::PendingReplies pending_;
+        std::unique_ptr<PubSubSession> replySession_;
+        std::vector<std::unique_ptr<PubSubSession>> idleSessions_;
+        std::mutex sessionsMutex_;
+        std::thread dispatcher_;
+        std::mutex startMutex_;
+        std::atomic<bool> started_{ false };
+        std::atomic<bool> stopping_{ false };
     };
 }

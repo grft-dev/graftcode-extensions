@@ -1,6 +1,6 @@
 # Google Cloud Pub/Sub plugin
 
-This plugin carries Graftcode Gateway calls over Google Cloud Pub/Sub. It implements `Hypertube::Native::Interfaces::ITransport` and `GraftcodeGateway::IServer`, and exports `CreateTransportChannel` / `DestroyTransportChannel` and `CreateServer` / `DestroyServer`.
+This plugin carries Graftcode Gateway calls over Google Cloud Pub/Sub. It implements `Hypertube::Native::Interfaces::ITransport` and `GraftcodeGateway::IServer`, and exports the transport C ABI `CreateTransport` / `DestroyTransport` / `TransportSendCommand` / `TransportFreeBuffer` (`GraftcodePluginsInterfaces/TransportPluginAbi.h`) and `CreateServer` / `DestroyServer`.
 
 It is written in C++. Dependencies are libcurl, OpenSSL, and nlohmann/json, installed with the same vcpkg toolchain file as the SQS and Service Bus plugins. They are linked into the plugin.
 
@@ -30,7 +30,7 @@ Pub/Sub is at-least-once. The gateway acks a request only after `processMessage`
 
 A request that is missing `correlationId` or a valid `replyTo` is also left unacked, so a dead-letter policy on the request subscription can take over. Configure `deadLetterPolicy` and `retryPolicy` on the subscription in Google Cloud when a poison message should stop being retried. The plugin does not change those policies. Make called operations idempotent: a crash after the reply is published and before the ack produces a second reply. The client drops replies whose correlation id does not match.
 
-Pulls use the REST `:pull` method, which returns immediately when the subscription is empty. The client polls until `rpcTimeoutMs`. Calls through one transport instance are serialized.
+Pulls use the REST `:pull` method, which returns immediately when the subscription is empty. The client polls until `rpcTimeoutMs`. Calls through one transport instance may run concurrently; one background puller dispatches replies by correlation id.
 
 Decoded payloads larger than 10 MiB are rejected. The JSON API carries message data as standard base64; that encoding is part of the Pub/Sub protocol, not an extra wrapper.
 

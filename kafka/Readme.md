@@ -1,6 +1,6 @@
 # Kafka Plugin
 
-This plugin carries Graftcode Gateway calls over Apache Kafka. It implements `Hypertube::Native::Interfaces::ITransport` and `GraftcodeGateway::IServer`, and exports `CreateTransportChannel` / `DestroyTransportChannel` and `CreateServer` / `DestroyServer`.
+This plugin carries Graftcode Gateway calls over Apache Kafka. It implements `Hypertube::Native::Interfaces::ITransport` and `GraftcodeGateway::IServer`, and exports the transport C ABI `CreateTransport` / `DestroyTransport` / `TransportSendCommand` / `TransportFreeBuffer` (`GraftcodePluginsInterfaces/TransportPluginAbi.h`) and `CreateServer` / `DestroyServer`.
 
 It is written in C++. CMake FetchContent builds nlohmann/json `v3.12.0`, librdkafka `v2.8.0` (static `rdkafka++`), zlib `v1.3.1`, and zstd `v1.5.6`, all linked into the plugin. OpenSSL is static too: on Windows configure with the vcpkg toolchain so it is the `/MT` build from `kafka/vcpkg.json` (the OpenSSL in `Program Files` is `/MD`); on Linux and macOS the build uses the PIC static archive from the system or Homebrew. LZ4 and Snappy are the copies compiled into librdkafka. The first configure needs network access.
 

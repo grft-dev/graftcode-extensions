@@ -2,6 +2,7 @@
 
 #include "IServer.h"
 #include "ITransport.h"
+#include "TransportPluginAbi.h"
 #include "SqsClient.h"
 #include "SqsConfig.h"
 #include "SqsServer.h"
@@ -22,13 +23,19 @@
 #include <thread>
 #include <vector>
 
-extern "C" Hypertube::Native::Interfaces::ITransport*
-CreateTransportChannel(
+extern "C" GraftcodeTransportChannel* CreateTransport(
     const char* ipAddress,
     unsigned short port,
-    const char* configSource);
-extern "C" void DestroyTransportChannel(
-    Hypertube::Native::Interfaces::ITransport* transport);
+    const char* configSource,
+    char** errorMessage);
+extern "C" void DestroyTransport(GraftcodeTransportChannel* channel);
+extern "C" int32_t TransportSendCommand(
+    GraftcodeTransportChannel* channel,
+    const unsigned char* message,
+    int32_t messageLen,
+    unsigned char** response,
+    int32_t* responseLen);
+extern "C" void TransportFreeBuffer(void* buffer);
 extern "C" GraftcodeGateway::IServer* CreateServer();
 extern "C" void DestroyServer(GraftcodeGateway::IServer* server);
 
@@ -342,17 +349,24 @@ TEST(SqsFifo, SetsGroupAndDedupOnlyForFifoQueues)
 
 TEST(SqsTransport, FactoryCreatesAndDestroysTransport)
 {
-    auto* transport = CreateTransportChannel(nullptr, 0, kLocalConfig);
-    ASSERT_NE(transport, nullptr);
-    EXPECT_EQ(transport->Initialize(1, 2, 0), 0);
+    char* errorMessage = nullptr;
+    auto* channel = CreateTransport(nullptr, 0, kLocalConfig, &errorMessage);
+    ASSERT_NE(channel, nullptr);
+    EXPECT_EQ(errorMessage, nullptr);
 
-    EXPECT_THROW(transport->SendCommand(nullptr, -1), std::invalid_argument);
-    EXPECT_THROW(transport->SendCommand(nullptr, 4), std::invalid_argument);
-
-    unsigned char buffer[4]{};
-    EXPECT_THROW(transport->ReadResponse(nullptr, 4), std::invalid_argument);
-    EXPECT_THROW(transport->ReadResponse(buffer, 4), std::runtime_error);
-    DestroyTransportChannel(transport);
+    for (const int32_t length : {-1, 4}) {
+        unsigned char* response = nullptr;
+        int32_t responseLen = 0;
+        EXPECT_EQ(
+            TransportSendCommand(channel, nullptr, length, &response, &responseLen),
+            GRAFTCODE_TRANSPORT_ERROR);
+        ASSERT_NE(response, nullptr);
+        EXPECT_EQ(
+            std::string(reinterpret_cast<const char*>(response), responseLen),
+            "SQS transport: invalid request payload");
+        TransportFreeBuffer(response);
+    }
+    DestroyTransport(channel);
 }
 
 TEST(SqsServer, FactoryConfigureAndStop)

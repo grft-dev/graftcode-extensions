@@ -1,10 +1,10 @@
 #include "TransportRabbitMq.h"
+#include "TransportPluginExports.h"
 
 #include <cstdlib>
+#include <memory>
 #include <stdexcept>
 #include <string>
-#include <thread>
-#include <mutex>
 #include <utility>
 
 using namespace  Graftcode::Plugins::Rabbitmq;
@@ -16,6 +16,7 @@ TransportRabbitMq::TransportRabbitMq(std::string host, unsigned short port, std:
 	config_.port = static_cast<std::uint16_t>(port);
 	this->configSource = configSource;
 	RabbitMqClient::ApplyConfigSource(configSource, config_);
+	client_ = std::make_unique<RabbitMqRpcClient>(config_);
 }
 
 int TransportRabbitMq::Initialize(byte callingRuntimeNumber, byte calledRuntimeNumber, byte calledRuntimeVersion)
@@ -26,60 +27,22 @@ int TransportRabbitMq::Initialize(byte callingRuntimeNumber, byte calledRuntimeN
 	return 0;
 }
 
-int TransportRabbitMq::SendCommand(byte* messageByteArray, int32_t messageByteArrayLen)
+std::vector<byte> TransportRabbitMq::SendCommand(byte* messageByteArray, int32_t messageByteArrayLen)
 {
 	if (messageByteArray == nullptr || messageByteArrayLen < 0) {
 		throw std::runtime_error("invalid RabbitMQ payload");
 	}
 
-	std::vector<byte> responsePayload;
-	const bool sent = RabbitMqClient::SendRpc(
-		config_,
+	std::vector<byte> responsePayload = client_->Call(
 		messageByteArray,
-		static_cast<std::size_t>(messageByteArrayLen),
-		responsePayload);
-	if (!sent) {
-		throw std::runtime_error("failed RabbitMQ request/response");
-	}
+		static_cast<std::size_t>(messageByteArrayLen));
 
 	if (!responsePayload.empty() && responsePayload[0] == static_cast<byte>(255)) {
 		const std::string errorMessage(responsePayload.begin() + 1, responsePayload.end());
 		throw std::runtime_error(errorMessage);
 	}
 
-	{
-		std::unique_lock<std::shared_mutex> lock(responseByThreadMutex_);
-		responseByThread_[std::this_thread::get_id()] = responsePayload;
-	}
-
-	return static_cast<int>(responsePayload.size());
-}
-
-int TransportRabbitMq::ReadResponse(byte* responseByteArray, int32_t responseByteArrayLen)
-{
-	if (responseByteArray == nullptr || responseByteArrayLen < 0) {
-		throw std::runtime_error("invalid response buffer");
-	}
-
-	std::vector<byte> responsePayload;
-	{
-		std::shared_lock<std::shared_mutex> lock(responseByThreadMutex_);
-		const auto it = responseByThread_.find(std::this_thread::get_id());
-		if (it == responseByThread_.end()) {
-			throw std::runtime_error("RabbitMQ response not found for thread");
-		}
-		responsePayload = it->second;
-	}
-
-	if (static_cast<std::size_t>(responseByteArrayLen) > responsePayload.size()) {
-		throw std::runtime_error("response buffer length mismatch");
-	}
-
-	for (int i = 0; i < responseByteArrayLen; i++) {
-		responseByteArray[i] = responsePayload[static_cast<std::size_t>(i)];
-	}
-
-	return 0;
+	return responsePayload;
 }
 
 #if defined(_WIN32)
@@ -88,16 +51,30 @@ int TransportRabbitMq::ReadResponse(byte* responseByteArray, int32_t responseByt
 #define RABBITMQ_PLUGIN_EXPORT extern "C"
 #endif
 
-RABBITMQ_PLUGIN_EXPORT Hypertube::Native::Interfaces::ITransport* CreateTransportChannel(const char* ipAddress, const unsigned short port, const char* configSource)
+RABBITMQ_PLUGIN_EXPORT GraftcodeTransportChannel* CreateTransport(const char* ipAddress, unsigned short port, const char* configSource, char** errorMessage)
 {
-	return new TransportRabbitMq(
-		ipAddress != nullptr ? std::string(ipAddress) : std::string(""),
-		port,
-		configSource != nullptr ? std::string(configSource) : std::string(""));
+	return Graftcode::Plugins::TransportAbi::CreateTransport(
+		[&] {
+			return new TransportRabbitMq(
+				ipAddress != nullptr ? std::string(ipAddress) : std::string(""),
+				port,
+				configSource != nullptr ? std::string(configSource) : std::string(""));
+		},
+		errorMessage);
 }
 
-RABBITMQ_PLUGIN_EXPORT void DestroyTransportChannel(Hypertube::Native::Interfaces::ITransport* transport)
+RABBITMQ_PLUGIN_EXPORT void DestroyTransport(GraftcodeTransportChannel* channel)
 {
-	delete transport;
+	Graftcode::Plugins::TransportAbi::DestroyTransport(channel);
+}
+
+RABBITMQ_PLUGIN_EXPORT int32_t TransportSendCommand(GraftcodeTransportChannel* channel, const unsigned char* message, int32_t messageLen, unsigned char** response, int32_t* responseLen)
+{
+	return Graftcode::Plugins::TransportAbi::SendCommand(channel, message, messageLen, response, responseLen);
+}
+
+RABBITMQ_PLUGIN_EXPORT void TransportFreeBuffer(void* buffer)
+{
+	Graftcode::Plugins::TransportAbi::FreeBuffer(buffer);
 }
 

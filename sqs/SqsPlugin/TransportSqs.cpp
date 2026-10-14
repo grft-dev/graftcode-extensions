@@ -1,4 +1,5 @@
 #include "TransportSqs.h"
+#include "TransportPluginExports.h"
 
 #include "SqsConfig.h"
 
@@ -34,7 +35,7 @@ int TransportSqs::Initialize(byte, byte, byte)
     return 0;
 }
 
-int TransportSqs::SendCommand(
+std::vector<byte> TransportSqs::SendCommand(
     byte* messageByteArray,
     int32_t messageByteArrayLen)
 {
@@ -48,41 +49,7 @@ int TransportSqs::SendCommand(
         static_cast<std::size_t>(messageByteArrayLen));
     RejectGatewayErrorPayload(response);
 
-    const int responseSize = static_cast<int>(response.size());
-    {
-        std::lock_guard<std::mutex> lock(responsesMutex_);
-        responses_[std::this_thread::get_id()] = std::move(response);
-    }
-    return responseSize;
-}
-
-int TransportSqs::ReadResponse(
-    byte* responseByteArray,
-    int32_t responseByteArrayLen)
-{
-    if (responseByteArrayLen < 0 ||
-        (responseByteArrayLen > 0 && responseByteArray == nullptr)) {
-        throw std::invalid_argument("SQS transport: invalid response buffer");
-    }
-
-    std::lock_guard<std::mutex> lock(responsesMutex_);
-    const auto response = responses_.find(std::this_thread::get_id());
-    if (response == responses_.end()) {
-        throw std::runtime_error(
-            "SQS transport: response not found for calling thread");
-    }
-    if (responseByteArrayLen !=
-        static_cast<int32_t>(response->second.size())) {
-        throw std::runtime_error(
-            "SQS transport: response buffer length mismatch");
-    }
-
-    std::copy(
-        response->second.begin(),
-        response->second.end(),
-        responseByteArray);
-    responses_.erase(response);
-    return 0;
+    return response;
 }
 
 #if defined(_WIN32)
@@ -91,17 +58,36 @@ int TransportSqs::ReadResponse(
 #define SQS_PLUGIN_EXPORT extern "C"
 #endif
 
-SQS_PLUGIN_EXPORT Hypertube::Native::Interfaces::ITransport*
-CreateTransportChannel(
+SQS_PLUGIN_EXPORT GraftcodeTransportChannel*
+CreateTransport(
     const char*,
-    const unsigned short,
-    const char* configSource)
+    unsigned short,
+    const char* configSource,
+    char** errorMessage)
 {
-    return new TransportSqs(configSource);
+    return Graftcode::Plugins::TransportAbi::CreateTransport(
+        [&] { return new TransportSqs(configSource); },
+        errorMessage);
 }
 
-SQS_PLUGIN_EXPORT void DestroyTransportChannel(
-    Hypertube::Native::Interfaces::ITransport* transport)
+SQS_PLUGIN_EXPORT void DestroyTransport(
+    GraftcodeTransportChannel* channel)
 {
-    delete transport;
+    Graftcode::Plugins::TransportAbi::DestroyTransport(channel);
+}
+
+SQS_PLUGIN_EXPORT int32_t TransportSendCommand(
+    GraftcodeTransportChannel* channel,
+    const unsigned char* message,
+    int32_t messageLen,
+    unsigned char** response,
+    int32_t* responseLen)
+{
+    return Graftcode::Plugins::TransportAbi::SendCommand(
+        channel, message, messageLen, response, responseLen);
+}
+
+SQS_PLUGIN_EXPORT void TransportFreeBuffer(void* buffer)
+{
+    Graftcode::Plugins::TransportAbi::FreeBuffer(buffer);
 }

@@ -1,7 +1,11 @@
 #pragma once
 
+#include "PendingReplies.h"
+
 #include <cstddef>
 #include <cstdint>
+#include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -59,5 +63,31 @@ namespace Graftcode::Plugins::ServiceBus
 
 		// Builds a full Service Bus connection string from the config fields.
 		static std::string BuildConnectionString(const ServiceBusClientConfig& config);
+	};
+
+	// Request/reply client that keeps one connection open and lets Call run concurrently.
+	// Replies come back on a reply session owned by this client and are matched by correlation id.
+	class ServiceBusRpcClient
+	{
+	public:
+		explicit ServiceBusRpcClient(ServiceBusClientConfig config);
+		~ServiceBusRpcClient();
+
+		ServiceBusRpcClient(const ServiceBusRpcClient&) = delete;
+		ServiceBusRpcClient& operator=(const ServiceBusRpcClient&) = delete;
+
+		// Sends the payload and returns the reply. In topic mode it publishes and returns an empty reply.
+		std::vector<byte> Call(const byte* payload, std::size_t payloadSize);
+
+	private:
+		class Link;
+
+		std::shared_ptr<Link> CurrentLink();
+
+		ServiceBusClientConfig config_;
+		std::string replySessionId_;
+		Concurrency::PendingReplies pending_;
+		std::mutex linkMutex_;
+		std::shared_ptr<Link> link_;
 	};
 }

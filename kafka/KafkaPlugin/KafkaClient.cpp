@@ -1,9 +1,9 @@
 #include "KafkaClient.h"
 #include "KafkaUtil.h"
 
-#include <algorithm>
 #include <chrono>
 #include <stdexcept>
+#include <string>
 #include <utility>
 
 #if __has_include(<librdkafka/rdkafkacpp.h>)
@@ -28,6 +28,23 @@ void drainProducer(RdKafka::Producer* producer, int timeoutMs) {
 
 }  // namespace
 
+class KafkaClient::DeliveryReports : public RdKafka::DeliveryReportCb {
+public:
+    explicit DeliveryReports(Graftcode::Plugins::Concurrency::PendingReplies& pending)
+        : pending_(pending) {}
+
+    void dr_cb(RdKafka::Message& message) override {
+        std::unique_ptr<std::string> correlationId(static_cast<std::string*>(message.msg_opaque()));
+        if (correlationId && message.err() != RdKafka::ERR_NO_ERROR) {
+            pending_.Fail(*correlationId, "Kafka delivery failed for correlation-id=" +
+                                              *correlationId + ": " + message.errstr());
+        }
+    }
+
+private:
+    Graftcode::Plugins::Concurrency::PendingReplies& pending_;
+};
+
 KafkaClient::KafkaClient(Config cfg) : cfg_(std::move(cfg)) {
     instanceId_ = KafkaPluginUtil::makeUuidV4();
     // Unique group so concurrent clients sharing one reply topic each get a full
@@ -38,7 +55,11 @@ KafkaClient::KafkaClient(Config cfg) : cfg_(std::move(cfg)) {
 }
 
 KafkaClient::~KafkaClient() {
-    std::lock_guard<std::mutex> lock(callMutex_);
+    stopping_.store(true, std::memory_order_release);
+    if (dispatcher_.joinable()) {
+        dispatcher_.join();
+    }
+    pending_.Close("Kafka client is shutting down");
     if (consumer_) {
         consumer_->close();
         consumer_.reset();
@@ -69,7 +90,11 @@ void KafkaClient::applySecurity(RdKafka::Conf* conf) const {
 }
 
 void KafkaClient::ensureStarted() {
-    if (started_) {
+    if (started_.load(std::memory_order_acquire)) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(startMutex_);
+    if (started_.load(std::memory_order_acquire)) {
         return;
     }
 
@@ -82,6 +107,12 @@ void KafkaClient::ensureStarted() {
         setConfOrThrow(pconf.get(), "client.id", "graft-kafka-client-producer-" + instanceId_);
         setConfOrThrow(pconf.get(), "message.timeout.ms", std::to_string(cfg_.rpcTimeoutMs));
         applySecurity(pconf.get());
+        if (!deliveryReports_) {
+            deliveryReports_ = std::make_unique<DeliveryReports>(pending_);
+        }
+        if (pconf->set("dr_cb", deliveryReports_.get(), errstr) != RdKafka::Conf::CONF_OK) {
+            throw std::runtime_error("Failed to set Kafka delivery report callback: " + errstr);
+        }
 
         RdKafka::Producer* raw = RdKafka::Producer::create(pconf.release(), errstr);
         if (!raw) {
@@ -122,17 +153,37 @@ void KafkaClient::ensureStarted() {
                 continue;
             }
             if (msg->err() == RdKafka::ERR_NO_ERROR) {
-                // Unexpected early message — leave for the next call() filter.
                 break;
-            }
-            if (msg->err() != RdKafka::ERR__TIMED_OUT &&
-                msg->err() != RdKafka::ERR__PARTITION_EOF) {
-                // Keep warming on transient errors.
             }
         }
     }
 
-    started_ = true;
+    dispatcher_ = std::thread(&KafkaClient::dispatchReplies, this);
+    started_.store(true, std::memory_order_release);
+}
+
+void KafkaClient::dispatchReplies() {
+    while (!stopping_.load(std::memory_order_acquire)) {
+        producer_->poll(0);
+
+        std::unique_ptr<RdKafka::Message> msg(consumer_->consume(100));
+        if (!msg || msg->err() != RdKafka::ERR_NO_ERROR) {
+            continue;
+        }
+
+        const std::string correlationId =
+            KafkaPluginUtil::headerValue(msg->headers(), "correlation-id");
+        if (correlationId.empty()) {
+            continue;
+        }
+
+        std::vector<unsigned char> payload;
+        if (msg->payload() != nullptr && msg->len() > 0) {
+            const auto* bytes = static_cast<const unsigned char*>(msg->payload());
+            payload.assign(bytes, bytes + msg->len());
+        }
+        pending_.Complete(correlationId, std::move(payload));
+    }
 }
 
 std::vector<unsigned char> KafkaClient::call(const unsigned char* data, std::size_t len) {
@@ -140,12 +191,13 @@ std::vector<unsigned char> KafkaClient::call(const unsigned char* data, std::siz
         throw std::invalid_argument("KafkaClient::call: null data with non-zero length");
     }
 
-    std::lock_guard<std::mutex> lock(callMutex_);
     ensureStarted();
 
     const std::string correlationId = KafkaPluginUtil::makeUuidV4();
+    auto ticket = pending_.Register(correlationId);
     RdKafka::Headers* headers =
         KafkaPluginUtil::makeRpcHeaders(correlationId, cfg_.replyTopic);
+    auto* deliveryTag = new std::string(correlationId);
 
     const RdKafka::ErrorCode produceErr = producer_->produce(
         cfg_.requestTopic,
@@ -157,61 +209,20 @@ std::vector<unsigned char> KafkaClient::call(const unsigned char* data, std::siz
         /*key_len=*/0,
         /*timestamp=*/0,
         headers,
-        /*msg_opaque=*/nullptr);
+        /*msg_opaque=*/deliveryTag);
 
     if (produceErr != RdKafka::ERR_NO_ERROR) {
-        // produce() takes ownership of headers only on success.
+        // produce() takes ownership of headers and the opaque tag only on success.
         delete headers;
+        delete deliveryTag;
         throw std::runtime_error("Kafka produce to '" + cfg_.requestTopic +
                                  "' failed: " + RdKafka::err2str(produceErr));
     }
 
-    producer_->poll(0);
-    // Wait until the request is handed off to the broker (best-effort).
-    if (producer_->flush(std::min(cfg_.rpcTimeoutMs, 10000)) != RdKafka::ERR_NO_ERROR) {
-        throw std::runtime_error("Kafka produce flush timed out for correlation-id=" +
-                                 correlationId);
+    std::vector<unsigned char> response;
+    if (!ticket.Wait(std::chrono::milliseconds(cfg_.rpcTimeoutMs), response)) {
+        throw std::runtime_error("Kafka RPC timed out after " + std::to_string(cfg_.rpcTimeoutMs) +
+                                 " ms waiting for correlation-id=" + correlationId);
     }
-
-    const auto deadline =
-        std::chrono::steady_clock::now() + std::chrono::milliseconds(cfg_.rpcTimeoutMs);
-
-    while (std::chrono::steady_clock::now() < deadline) {
-        const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                   deadline - std::chrono::steady_clock::now())
-                                   .count();
-        const int pollMs = static_cast<int>(std::min<std::int64_t>(remaining, 200));
-
-        std::unique_ptr<RdKafka::Message> msg(consumer_->consume(pollMs));
-        if (!msg) {
-            continue;
-        }
-
-        if (msg->err() == RdKafka::ERR__TIMED_OUT ||
-            msg->err() == RdKafka::ERR__PARTITION_EOF) {
-            continue;
-        }
-        if (msg->err() != RdKafka::ERR_NO_ERROR) {
-            throw std::runtime_error("Kafka consume error while waiting for reply: " +
-                                     msg->errstr());
-        }
-
-        const std::string gotId =
-            KafkaPluginUtil::headerValue(msg->headers(), "correlation-id");
-        if (gotId != correlationId) {
-            // Shared reply topic / other clients — skip.
-            continue;
-        }
-
-        const void* payload = msg->payload();
-        const std::size_t payloadLen = static_cast<std::size_t>(msg->len());
-        if (!payload || payloadLen == 0) {
-            return {};
-        }
-        const auto* bytes = static_cast<const unsigned char*>(payload);
-        return std::vector<unsigned char>(bytes, bytes + payloadLen);
-    }
-
-    throw std::runtime_error("Kafka RPC timed out after " + std::to_string(cfg_.rpcTimeoutMs) +
-                             " ms waiting for correlation-id=" + correlationId);
+    return response;
 }
