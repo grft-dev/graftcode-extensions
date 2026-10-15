@@ -39,7 +39,7 @@ namespace Graftcode::Plugins::TransportAbi
     }
 
     template <typename Factory>
-    GraftcodeTransportChannel* CreateTransport(Factory&& factory, char** errorMessage)
+    TransportPluginChannel* CreateTransport(Factory&& factory, char** errorMessage)
     {
         if (errorMessage != nullptr) {
             *errorMessage = nullptr;
@@ -47,7 +47,7 @@ namespace Graftcode::Plugins::TransportAbi
         std::string error;
         try {
             ITransport* transport = factory();
-            return reinterpret_cast<GraftcodeTransportChannel*>(transport);
+            return reinterpret_cast<TransportPluginChannel*>(transport);
         }
         catch (const std::exception& e) {
             error = e.what();
@@ -61,20 +61,20 @@ namespace Graftcode::Plugins::TransportAbi
         return nullptr;
     }
 
-    inline void DestroyTransport(GraftcodeTransportChannel* channel)
+    inline void DestroyTransport(TransportPluginChannel* channel)
     {
         delete reinterpret_cast<ITransport*>(channel);
     }
 
     inline int32_t SendCommand(
-        GraftcodeTransportChannel* channel,
+        TransportPluginChannel* channel,
         const unsigned char* message,
         int32_t messageLen,
         unsigned char** response,
         int32_t* responseLen)
     {
         if (response == nullptr || responseLen == nullptr) {
-            return GRAFTCODE_TRANSPORT_ERROR;
+            return TRANSPORT_PLUGIN_ERROR;
         }
         *response = nullptr;
         *responseLen = 0;
@@ -92,7 +92,7 @@ namespace Graftcode::Plugins::TransportAbi
             }
             *response = buffer;
             *responseLen = static_cast<int32_t>(result.size());
-            return GRAFTCODE_TRANSPORT_OK;
+            return TRANSPORT_PLUGIN_OK;
         }
         catch (const std::exception& e) {
             error = e.what();
@@ -102,7 +102,7 @@ namespace Graftcode::Plugins::TransportAbi
         }
         *response = CopyBuffer(error.data(), error.size());
         *responseLen = *response != nullptr ? static_cast<int32_t>(error.size()) : 0;
-        return GRAFTCODE_TRANSPORT_ERROR;
+        return TRANSPORT_PLUGIN_ERROR;
     }
 
     inline void FreeBuffer(void* buffer)

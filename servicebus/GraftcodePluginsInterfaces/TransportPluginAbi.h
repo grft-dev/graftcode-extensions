@@ -23,30 +23,30 @@
 extern "C" {
 #endif
 
-#define GRAFTCODE_TRANSPORT_OK 0
-#define GRAFTCODE_TRANSPORT_ERROR (-1)
+#define TRANSPORT_PLUGIN_OK 0
+#define TRANSPORT_PLUGIN_ERROR (-1)
 
 /** Opaque transport channel owned by the plugin. */
-typedef struct GraftcodeTransportChannel GraftcodeTransportChannel;
+typedef struct TransportPluginChannel TransportPluginChannel;
 
 /**
  * Creates a transport channel.
  * Returns null on failure; *errorMessage then receives a NUL-terminated message (or null).
  */
-typedef GraftcodeTransportChannel* (*GraftcodeCreateTransportFn)(const char* ipAddress, unsigned short port, const char* configSource, char** errorMessage);
+typedef TransportPluginChannel* (*TransportPluginCreateFn)(const char* ipAddress, unsigned short port, const char* configSource, char** errorMessage);
 
 /** Destroys a channel returned by CreateTransport. */
-typedef void (*GraftcodeDestroyTransportFn)(GraftcodeTransportChannel* channel);
+typedef void (*TransportPluginDestroyFn)(TransportPluginChannel* channel);
 
 /**
  * Sends a request and returns its response. May be called concurrently on one channel.
- * On GRAFTCODE_TRANSPORT_OK, *response and *responseLen hold the response (*response may be null when the length is 0).
+ * On TRANSPORT_PLUGIN_OK, *response and *responseLen hold the response (*response may be null when the length is 0).
  * Otherwise they hold a NUL-terminated error message and its length without the terminator.
  */
-typedef int32_t (*GraftcodeTransportSendCommandFn)(GraftcodeTransportChannel* channel, const unsigned char* message, int32_t messageLen, unsigned char** response, int32_t* responseLen);
+typedef int32_t (*TransportPluginSendCommandFn)(TransportPluginChannel* channel, const unsigned char* message, int32_t messageLen, unsigned char** response, int32_t* responseLen);
 
 /** Releases a buffer returned by the plugin. */
-typedef void (*GraftcodeTransportFreeBufferFn)(void* buffer);
+typedef void (*TransportPluginFreeBufferFn)(void* buffer);
 
 #ifdef __cplusplus
 }

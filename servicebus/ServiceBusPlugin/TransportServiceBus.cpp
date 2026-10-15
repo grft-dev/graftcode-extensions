@@ -51,7 +51,7 @@ std::vector<byte> TransportServiceBus::SendCommand(byte* messageByteArray, int32
 #define SERVICEBUS_PLUGIN_EXPORT extern "C"
 #endif
 
-SERVICEBUS_PLUGIN_EXPORT GraftcodeTransportChannel* CreateTransport(const char* ipAddress, unsigned short port, const char* configSource, char** errorMessage)
+SERVICEBUS_PLUGIN_EXPORT TransportPluginChannel* CreateTransport(const char* ipAddress, unsigned short port, const char* configSource, char** errorMessage)
 {
 	return Graftcode::Plugins::TransportAbi::CreateTransport(
 		[&] {
@@ -63,12 +63,12 @@ SERVICEBUS_PLUGIN_EXPORT GraftcodeTransportChannel* CreateTransport(const char* 
 		errorMessage);
 }
 
-SERVICEBUS_PLUGIN_EXPORT void DestroyTransport(GraftcodeTransportChannel* channel)
+SERVICEBUS_PLUGIN_EXPORT void DestroyTransport(TransportPluginChannel* channel)
 {
 	Graftcode::Plugins::TransportAbi::DestroyTransport(channel);
 }
 
-SERVICEBUS_PLUGIN_EXPORT int32_t TransportSendCommand(GraftcodeTransportChannel* channel, const unsigned char* message, int32_t messageLen, unsigned char** response, int32_t* responseLen)
+SERVICEBUS_PLUGIN_EXPORT int32_t TransportSendCommand(TransportPluginChannel* channel, const unsigned char* message, int32_t messageLen, unsigned char** response, int32_t* responseLen)
 {
 	return Graftcode::Plugins::TransportAbi::SendCommand(channel, message, messageLen, response, responseLen);
 }

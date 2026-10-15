@@ -79,15 +79,15 @@ std::vector<byte> TransportKafka::SendCommand(byte* messageByteArray, int32_t me
     return response;
 }
 
-KAFKA_PLUGIN_EXPORT GraftcodeTransportChannel* CreateTransport(const char* ipAddress, unsigned short port, const char* configSource, char** errorMessage) {
+KAFKA_PLUGIN_EXPORT TransportPluginChannel* CreateTransport(const char* ipAddress, unsigned short port, const char* configSource, char** errorMessage) {
     return Graftcode::Plugins::TransportAbi::CreateTransport([&] { return new TransportKafka(ipAddress, port, configSource); }, errorMessage);
 }
 
-KAFKA_PLUGIN_EXPORT void DestroyTransport(GraftcodeTransportChannel* channel) {
+KAFKA_PLUGIN_EXPORT void DestroyTransport(TransportPluginChannel* channel) {
     Graftcode::Plugins::TransportAbi::DestroyTransport(channel);
 }
 
-KAFKA_PLUGIN_EXPORT int32_t TransportSendCommand(GraftcodeTransportChannel* channel, const unsigned char* message, int32_t messageLen, unsigned char** response, int32_t* responseLen) {
+KAFKA_PLUGIN_EXPORT int32_t TransportSendCommand(TransportPluginChannel* channel, const unsigned char* message, int32_t messageLen, unsigned char** response, int32_t* responseLen) {
     return Graftcode::Plugins::TransportAbi::SendCommand(channel, message, messageLen, response, responseLen);
 }
 

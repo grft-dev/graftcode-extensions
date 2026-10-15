@@ -12,9 +12,9 @@
 
 KAFKA_PLUGIN_IMPORT GraftcodeGateway::IServer* CreateServer();
 KAFKA_PLUGIN_IMPORT void DestroyServer(GraftcodeGateway::IServer* server);
-KAFKA_PLUGIN_IMPORT GraftcodeTransportChannel* CreateTransport(
+KAFKA_PLUGIN_IMPORT TransportPluginChannel* CreateTransport(
     const char* ipAddress, unsigned short port, const char* configSource, char** errorMessage);
-KAFKA_PLUGIN_IMPORT void DestroyTransport(GraftcodeTransportChannel* channel);
+KAFKA_PLUGIN_IMPORT void DestroyTransport(TransportPluginChannel* channel);
 KAFKA_PLUGIN_IMPORT void TransportFreeBuffer(void* buffer);
 
 static bool g_processCalled = false;
@@ -46,7 +46,7 @@ int main() {
     DestroyServer(server);
 
     char* errorMessage = nullptr;
-    GraftcodeTransportChannel* transport =
+    TransportPluginChannel* transport =
         CreateTransport("127.0.0.1", 0, cfg, &errorMessage);
     if (transport == nullptr) {
         std::printf("FAIL: CreateTransport returned null: %s\n", errorMessage != nullptr ? errorMessage : "");

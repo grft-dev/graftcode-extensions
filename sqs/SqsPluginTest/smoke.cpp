@@ -11,9 +11,9 @@
 
 SQS_PLUGIN_IMPORT GraftcodeGateway::IServer* CreateServer();
 SQS_PLUGIN_IMPORT void DestroyServer(GraftcodeGateway::IServer* server);
-SQS_PLUGIN_IMPORT GraftcodeTransportChannel* CreateTransport(
+SQS_PLUGIN_IMPORT TransportPluginChannel* CreateTransport(
     const char* ipAddress, unsigned short port, const char* configSource, char** errorMessage);
-SQS_PLUGIN_IMPORT void DestroyTransport(GraftcodeTransportChannel* channel);
+SQS_PLUGIN_IMPORT void DestroyTransport(TransportPluginChannel* channel);
 SQS_PLUGIN_IMPORT void TransportFreeBuffer(void* buffer);
 
 static bool smokeProcess(
@@ -52,7 +52,7 @@ int main()
     DestroyServer(server);
 
     char* errorMessage = nullptr;
-    GraftcodeTransportChannel* transport =
+    TransportPluginChannel* transport =
         CreateTransport(nullptr, 0, config, &errorMessage);
     if (transport == nullptr) {
         std::printf("FAIL: CreateTransport returned null: %s\n", errorMessage != nullptr ? errorMessage : "");

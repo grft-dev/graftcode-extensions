@@ -15,14 +15,14 @@
 #include <string>
 #include <vector>
 
-extern "C" GraftcodeTransportChannel* CreateTransport(
+extern "C" TransportPluginChannel* CreateTransport(
 	const char* ipAddress,
 	unsigned short port,
 	const char* configSource,
 	char** errorMessage);
-extern "C" void DestroyTransport(GraftcodeTransportChannel* channel);
+extern "C" void DestroyTransport(TransportPluginChannel* channel);
 extern "C" int32_t TransportSendCommand(
-	GraftcodeTransportChannel* channel,
+	TransportPluginChannel* channel,
 	const unsigned char* message,
 	int32_t messageLen,
 	unsigned char** response,
