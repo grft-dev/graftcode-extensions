@@ -31,26 +31,6 @@ namespace Graft.Netcore.Telemetry.AppInsightsConnector
             var connectionString = options.ResolveConnectionString();
             IsExportingToAppInsightsConnector = connectionString != null;
 
-            var tracing = Sdk.CreateTracerProviderBuilder()
-                .SetResourceBuilder(resource)
-                .AddSource(options.GetActivitySourceNames());
-
-            if (connectionString != null)
-            {
-                tracing.AddAzureMonitorTraceExporter(exporter =>
-                {
-                    exporter.ConnectionString = connectionString;
-                    exporter.TracesPerSecond = options.TracesPerSecond;
-                });
-
-                if (options.TracesPerSecond == null)
-                {
-                    tracing.SetSampler(new AlwaysOnSampler());
-                }
-            }
-
-            _tracerProvider = tracing.Build();
-
             var loggingServices = new ServiceCollection();
             loggingServices.AddLogging(logging =>
             {
@@ -78,9 +58,29 @@ namespace Graft.Netcore.Telemetry.AppInsightsConnector
 
             _loggerProvider = _loggingServices.GetService<LoggerProvider>();
 
-            Logger = _loggingServices
-                .GetRequiredService<ILoggerFactory>()
-                .CreateLogger(ServiceName);
+            var loggerFactory = _loggingServices.GetRequiredService<ILoggerFactory>();
+            Logger = loggerFactory.CreateLogger(ServiceName);
+
+            var tracing = Sdk.CreateTracerProviderBuilder()
+                .SetResourceBuilder(resource)
+                .AddSource(options.GetActivitySourceNames())
+                .AddGraftcodeInstrumentation(loggerFactory.CreateLogger("Hypertube"));
+
+            if (connectionString != null)
+            {
+                tracing.AddAzureMonitorTraceExporter(exporter =>
+                {
+                    exporter.ConnectionString = connectionString;
+                    exporter.TracesPerSecond = options.TracesPerSecond;
+                });
+
+                if (options.TracesPerSecond == null)
+                {
+                    tracing.SetSampler(new AlwaysOnSampler());
+                }
+            }
+
+            _tracerProvider = tracing.Build();
 
             if (!IsExportingToAppInsightsConnector)
             {
