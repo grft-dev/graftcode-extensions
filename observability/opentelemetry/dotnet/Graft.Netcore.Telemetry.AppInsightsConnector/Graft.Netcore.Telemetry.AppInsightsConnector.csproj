@@ -4,6 +4,7 @@
     <TargetFrameworks>netstandard2.1;net8.0;net9.0;net10.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <LangVersion Condition="'$(TargetFramework)' == 'netstandard2.1'">10.0</LangVersion>
     <Title>Graft App Insights Connector</Title>
     <Description>One-line Application Insights telemetry setup for Graft applications.</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
@@ -28,6 +29,14 @@
     <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.9" />
     <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.0" />
     <PackageReference Include="OpenTelemetry" Version="1.17.0" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <GraftcodeInstrumentationProject Condition="'$(GraftcodeInstrumentationProject)' == ''">$(MSBuildThisFileDirectory)..\..\..\Instrumentation\dotnet\src\Graftcode.Instrumentation\Graftcode.Instrumentation.csproj</GraftcodeInstrumentationProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="$(GraftcodeInstrumentationProject)" />
   </ItemGroup>
 
 </Project>

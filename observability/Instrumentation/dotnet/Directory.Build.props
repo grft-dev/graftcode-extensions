@@ -1,0 +1,10 @@
+<Project>
+  <PropertyGroup>
+    <HypertubeUtilsProject Condition="'$(HypertubeUtilsProject)' == ''">$(MSBuildThisFileDirectory)..\..\..\..\NewHT\HYPERTUBE\src\netcore\Hypertube.Netcore.Utils\Hypertube.Netcore.Utils.csproj</HypertubeUtilsProject>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(UseHypertubeUtilsProject)' == '' and Exists('$(HypertubeUtilsProject)')">
+    <UseHypertubeUtilsProject>true</UseHypertubeUtilsProject>
+  </PropertyGroup>
+</Project>
+
+

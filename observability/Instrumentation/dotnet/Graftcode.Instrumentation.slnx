@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Graftcode.Instrumentation/Graftcode.Instrumentation.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Graftcode.Instrumentation.Tests/Graftcode.Instrumentation.Tests.csproj" />
+  </Folder>
+</Solution>
