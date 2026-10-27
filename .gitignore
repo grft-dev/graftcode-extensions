@@ -8,3 +8,6 @@ bin/
 obj/
 Binaries/
 vcpkg_installed/
+
+target/
+*.class
