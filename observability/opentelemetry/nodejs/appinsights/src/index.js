@@ -9,7 +9,7 @@ import { LogsLevel, parseLogsLevel } from 'hypertube-nodejs-sdk/observability'
 import { createAppLogger } from './appLogger.js'
 
 /**
- * @typedef {Object} GraftAppInsightsOptions
+ * @typedef {Object} GraftCodeAppInsightsOptions
  * @property {string} serviceName - Shown as the cloud role name in Application Insights.
  * @property {string} [connectionString] - Defaults to `APPLICATIONINSIGHTS_CONNECTION_STRING`.
  * @property {number} [tracesPerSecond] - Rate-limit sampling. By default every trace is kept.
@@ -22,7 +22,7 @@ import { createAppLogger } from './appLogger.js'
  */
 
 /**
- * @typedef {Object} GraftAppLogger
+ * @typedef {Object} GraftCodeAppLogger
  * @property {(message: string, attributes?: Record<string, string | number | boolean | undefined>) => void} debug
  * @property {(message: string, attributes?: Record<string, string | number | boolean | undefined>) => void} info
  * @property {(message: string, attributes?: Record<string, string | number | boolean | undefined>) => void} warn
@@ -30,34 +30,34 @@ import { createAppLogger } from './appLogger.js'
  */
 
 /**
- * @typedef {Object} GraftTelemetry
+ * @typedef {Object} GraftCodeTelemetry
  * @property {string} serviceName
  * @property {boolean} isExporting - Whether telemetry is sent to Application Insights.
  * @property {import('@opentelemetry/api').Tracer} tracer
- * @property {GraftAppLogger} logger
+ * @property {GraftCodeAppLogger} logger
  * @property {() => Promise<void>} flush - Sends buffered telemetry now.
  * @property {() => Promise<void>} shutdown - Flushes and stops telemetry. Safe to call more than once.
  */
 
-/** @type {GraftTelemetry | undefined} */
+/** @type {GraftCodeTelemetry | undefined} */
 let active
 
 /**
  * Starts OpenTelemetry with the Azure Monitor exporters and Graftcode instrumentation. Call it once,
  * as early as possible (for a web server, before the HTTP framework is imported, e.g. via `node --import`).
- * @param {GraftAppInsightsOptions} options
- * @returns {GraftTelemetry}
+ * @param {GraftCodeAppInsightsOptions} options
+ * @returns {GraftCodeTelemetry}
  */
-export function useGraftAppInsights(options) {
+export function useGraftCodeAppInsights(options) {
     const serviceName = options?.serviceName?.trim()
     if (!serviceName) {
-        throw new TypeError('useGraftAppInsights needs a serviceName')
+        throw new TypeError('useGraftCodeAppInsights needs a serviceName')
     }
     if (active) {
         if (active.serviceName === serviceName) {
             return active
         }
-        throw new Error(`Graft Application Insights telemetry is already started for ${active.serviceName}`)
+        throw new Error(`GraftCode Application Insights telemetry is already started for ${active.serviceName}`)
     }
 
     const connectionString =
@@ -77,7 +77,7 @@ export function useGraftAppInsights(options) {
 
     /** @type {Promise<void> | undefined} */
     let stopping
-    /** @type {GraftTelemetry} */
+    /** @type {GraftCodeTelemetry} */
     const telemetry = {
         serviceName,
         isExporting: connectionString !== undefined,
@@ -113,7 +113,7 @@ export function useGraftAppInsights(options) {
 /**
  * @param {string} serviceName
  * @param {string} connectionString
- * @param {GraftAppInsightsOptions} options
+ * @param {GraftCodeAppInsightsOptions} options
  * @returns {() => Promise<void>}
  */
 function startAzureMonitor(serviceName, connectionString, options) {

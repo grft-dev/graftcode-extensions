@@ -13,7 +13,7 @@ import java.io.StringWriter;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-public final class GraftAppInsightsLogger {
+public final class GraftCodeAppInsightsLogger {
     private static final String CONSOLE_INDENT = "      ";
 
     private final String category;
@@ -21,7 +21,7 @@ public final class GraftAppInsightsLogger {
     private final LogsLevel minimumLevel;
     private final PrintStream console;
 
-    GraftAppInsightsLogger(String category, Logger logger, LogsLevel minimumLevel, PrintStream console) {
+    GraftCodeAppInsightsLogger(String category, Logger logger, LogsLevel minimumLevel, PrintStream console) {
         this.category = category;
         this.logger = logger;
         this.minimumLevel = minimumLevel;

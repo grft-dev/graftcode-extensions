@@ -22,7 +22,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Graft.Netcore.Telemetry.AppInsightsConnector\Graft.Netcore.Telemetry.AppInsightsConnector.csproj" />
+    <ProjectReference Include="..\GraftCode.Netcore.Telemetry.AppInsightsConnector\GraftCode.Netcore.Telemetry.AppInsightsConnector.csproj" />
   </ItemGroup>
 
 </Project>

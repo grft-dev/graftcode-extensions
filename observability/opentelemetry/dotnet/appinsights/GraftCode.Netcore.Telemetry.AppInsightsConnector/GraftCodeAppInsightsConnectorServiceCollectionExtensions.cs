@@ -1,20 +1,20 @@
-using Graft.Netcore.Telemetry.AppInsightsConnector;
+using GraftCode.Netcore.Telemetry.AppInsightsConnector;
 
 namespace Microsoft.Extensions.DependencyInjection
 {
-    public static class GraftAppInsightsConnectorServiceCollectionExtensions
+    public static class GraftCodeAppInsightsConnectorServiceCollectionExtensions
     {
-        public static IServiceCollection AddGraftAppInsightsConnector(
+        public static IServiceCollection AddGraftCodeAppInsightsConnector(
             this IServiceCollection services,
             string serviceName)
         {
-            return services.AddGraftAppInsightsConnector(
+            return services.AddGraftCodeAppInsightsConnector(
                 options => options.ServiceName = serviceName);
         }
 
-        public static IServiceCollection AddGraftAppInsightsConnector(
+        public static IServiceCollection AddGraftCodeAppInsightsConnector(
             this IServiceCollection services,
-            Action<GraftAppInsightsConnectorOptions> configure)
+            Action<GraftCodeAppInsightsConnectorOptions> configure)
         {
             if (services == null)
             {
@@ -26,13 +26,13 @@ namespace Microsoft.Extensions.DependencyInjection
                 throw new ArgumentNullException(nameof(configure));
             }
 
-            var options = new GraftAppInsightsConnectorOptions();
+            var options = new GraftCodeAppInsightsConnectorOptions();
             configure(options);
             options.Validate();
 
             services.AddSingleton(options);
-            services.AddSingleton<GraftAppInsightsConnectorPipeline>(
-                _ => GraftAppInsightsConnector.Start(options));
+            services.AddSingleton<GraftCodeAppInsightsConnectorPipeline>(
+                _ => GraftCodeAppInsightsConnector.Start(options));
 
             return services;
         }

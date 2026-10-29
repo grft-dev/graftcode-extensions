@@ -17,7 +17,7 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 
-class GraftAppInsightsConnectorTest {
+class GraftCodeAppInsightsConnectorTest {
     private static final String LOCAL_CONNECTION_STRING =
             "InstrumentationKey=00000000-0000-0000-0000-000000000001;"
                     + "IngestionEndpoint=http://127.0.0.1:1/;LiveEndpoint=http://127.0.0.1:1/";
@@ -26,12 +26,12 @@ class GraftAppInsightsConnectorTest {
     void start_RequiresAServiceName() {
         Assertions.assertThrows(
                 IllegalStateException.class,
-                () -> GraftAppInsightsConnector.start(new GraftAppInsightsConnectorOptions()));
+                () -> GraftCodeAppInsightsConnector.start(new GraftCodeAppInsightsConnectorOptions()));
     }
 
     @Test
     void start_RejectsANonPositiveRateLimit() {
-        Assertions.assertThrows(IllegalStateException.class, () -> GraftAppInsightsConnector.start(options -> {
+        Assertions.assertThrows(IllegalStateException.class, () -> GraftCodeAppInsightsConnector.start(options -> {
             options.setServiceName("test.service");
             options.setTracesPerSecond(0.0);
         }));
@@ -40,9 +40,9 @@ class GraftAppInsightsConnectorTest {
     @Test
     void explicitConnectionString_WinsOverEnvironment() {
         Map<String, String> environment = new HashMap<>();
-        environment.put(GraftAppInsightsConnectorOptions.CONNECTION_STRING_VARIABLE, "InstrumentationKey=11111111-1111-1111-1111-111111111111");
+        environment.put(GraftCodeAppInsightsConnectorOptions.CONNECTION_STRING_VARIABLE, "InstrumentationKey=11111111-1111-1111-1111-111111111111");
 
-        GraftAppInsightsConnectorOptions options = new GraftAppInsightsConnectorOptions();
+        GraftCodeAppInsightsConnectorOptions options = new GraftCodeAppInsightsConnectorOptions();
         options.setServiceName("test");
         options.setConnectionString("InstrumentationKey=22222222-2222-2222-2222-222222222222");
         options.setEnvironment(environment::get);
@@ -52,7 +52,7 @@ class GraftAppInsightsConnectorTest {
 
     @Test
     void environmentConnectionString_IsUsedWhenNoneIsConfigured() {
-        GraftAppInsightsConnectorOptions options = new GraftAppInsightsConnectorOptions();
+        GraftCodeAppInsightsConnectorOptions options = new GraftCodeAppInsightsConnectorOptions();
 
         options.setEnvironment(name -> "InstrumentationKey=1");
         Assertions.assertEquals("InstrumentationKey=1", options.resolveConnectionString());
@@ -63,7 +63,7 @@ class GraftAppInsightsConnectorTest {
 
     @Test
     void start_WorksWithoutAConnectionString() {
-        try (GraftAppInsightsConnectorPipeline pipeline = startLocal()) {
+        try (GraftCodeAppInsightsConnectorPipeline pipeline = startLocal()) {
             Span span = pipeline.startSpan("test.operation");
             try (Scope ignored = span.makeCurrent()) {
                 Assertions.assertTrue(span.getSpanContext().isValid());
@@ -78,14 +78,14 @@ class GraftAppInsightsConnectorTest {
 
     @Test
     void missingConnectionString_IsReported() {
-        try (GraftAppInsightsConnectorPipeline pipeline = startLocal()) {
+        try (GraftCodeAppInsightsConnectorPipeline pipeline = startLocal()) {
             Assertions.assertFalse(pipeline.isExportingToAppInsights());
         }
     }
 
     @Test
     void everyTraceIsRecorded_SoLogsAreNotSampledAway() {
-        try (GraftAppInsightsConnectorPipeline pipeline = startExporting(null)) {
+        try (GraftCodeAppInsightsConnectorPipeline pipeline = startExporting(null)) {
             Assertions.assertTrue(pipeline.isExportingToAppInsights());
 
             for (int i = 0; i < 25; i++) {
@@ -98,7 +98,7 @@ class GraftAppInsightsConnectorTest {
 
     @Test
     void rateLimitedSampling_CanBeOptedInto() {
-        try (GraftAppInsightsConnectorPipeline pipeline = startExporting(0.0001)) {
+        try (GraftCodeAppInsightsConnectorPipeline pipeline = startExporting(0.0001)) {
             int recorded = 0;
             for (int i = 0; i < 25; i++) {
                 Span span = pipeline.startSpan("test.operation." + i, SpanKind.SERVER);
@@ -124,11 +124,11 @@ class GraftAppInsightsConnectorTest {
                         .addLogRecordProcessor(BatchLogRecordProcessor.builder(logs).setScheduleDelay(Duration.ofHours(1)).build())
                         .build())
                 .build();
-        GraftAppInsightsConnectorOptions options = new GraftAppInsightsConnectorOptions();
+        GraftCodeAppInsightsConnectorOptions options = new GraftCodeAppInsightsConnectorOptions();
         options.setServiceName("test.service");
         options.setEnableConsoleLogging(false);
 
-        try (GraftAppInsightsConnectorPipeline pipeline = new GraftAppInsightsConnectorPipeline(options, sdk)) {
+        try (GraftCodeAppInsightsConnectorPipeline pipeline = new GraftCodeAppInsightsConnectorPipeline(options, sdk)) {
             Span span = pipeline.startSpan("test.operation");
             try (Scope ignored = span.makeCurrent()) {
                 pipeline.getLogger().info("Test log {Value}", 42);
@@ -148,23 +148,23 @@ class GraftAppInsightsConnectorTest {
 
     @Test
     void close_IsIdempotent_AndFlushAfterCloseSucceeds() {
-        GraftAppInsightsConnectorPipeline pipeline = startLocal();
+        GraftCodeAppInsightsConnectorPipeline pipeline = startLocal();
         pipeline.close();
         pipeline.close();
 
         Assertions.assertTrue(pipeline.forceFlush());
     }
 
-    private static GraftAppInsightsConnectorPipeline startLocal() {
-        GraftAppInsightsConnectorOptions options = new GraftAppInsightsConnectorOptions();
+    private static GraftCodeAppInsightsConnectorPipeline startLocal() {
+        GraftCodeAppInsightsConnectorOptions options = new GraftCodeAppInsightsConnectorOptions();
         options.setServiceName("test.service");
         options.setEnableConsoleLogging(false);
         options.setEnvironment(name -> null);
-        return GraftAppInsightsConnector.start(options);
+        return GraftCodeAppInsightsConnector.start(options);
     }
 
-    private static GraftAppInsightsConnectorPipeline startExporting(Double tracesPerSecond) {
-        return GraftAppInsightsConnector.start(options -> {
+    private static GraftCodeAppInsightsConnectorPipeline startExporting(Double tracesPerSecond) {
+        return GraftCodeAppInsightsConnector.start(options -> {
             options.setServiceName("test.service");
             options.setEnableConsoleLogging(false);
             options.setConnectionString(LOCAL_CONNECTION_STRING);

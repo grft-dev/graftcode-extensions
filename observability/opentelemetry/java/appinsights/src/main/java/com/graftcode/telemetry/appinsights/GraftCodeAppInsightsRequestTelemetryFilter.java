@@ -20,7 +20,7 @@ import java.lang.reflect.Method;
 import java.util.Collections;
 import java.util.Objects;
 
-public final class GraftAppInsightsRequestTelemetryFilter implements Filter {
+public final class GraftCodeAppInsightsRequestTelemetryFilter implements Filter {
     public static final String CONTROLLER_ATTRIBUTE = "graft.controller";
 
     private static final String SPRING_HANDLER_ATTRIBUTE =
@@ -39,9 +39,9 @@ public final class GraftAppInsightsRequestTelemetryFilter implements Filter {
         }
     };
 
-    private final GraftAppInsightsConnectorPipeline telemetry;
+    private final GraftCodeAppInsightsConnectorPipeline telemetry;
 
-    public GraftAppInsightsRequestTelemetryFilter(GraftAppInsightsConnectorPipeline telemetry) {
+    public GraftCodeAppInsightsRequestTelemetryFilter(GraftCodeAppInsightsConnectorPipeline telemetry) {
         this.telemetry = Objects.requireNonNull(telemetry, "telemetry");
     }
 

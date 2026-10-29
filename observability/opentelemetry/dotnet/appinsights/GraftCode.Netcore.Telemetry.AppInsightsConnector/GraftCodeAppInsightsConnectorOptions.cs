@@ -1,8 +1,8 @@
 using Microsoft.Extensions.Logging;
 
-namespace Graft.Netcore.Telemetry.AppInsightsConnector
+namespace GraftCode.Netcore.Telemetry.AppInsightsConnector
 {
-    public sealed class GraftAppInsightsConnectorOptions
+    public sealed class GraftCodeAppInsightsConnectorOptions
     {
         private readonly HashSet<string> _activitySourceNames =
             new HashSet<string>(StringComparer.Ordinal);

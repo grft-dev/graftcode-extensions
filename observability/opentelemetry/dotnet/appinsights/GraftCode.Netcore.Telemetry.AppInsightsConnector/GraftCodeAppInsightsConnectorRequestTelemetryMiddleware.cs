@@ -2,16 +2,16 @@
 using System.Diagnostics;
 using Microsoft.AspNetCore.Http;
 
-namespace Graft.Netcore.Telemetry.AppInsightsConnector
+namespace GraftCode.Netcore.Telemetry.AppInsightsConnector
 {
-    public sealed class GraftAppInsightsConnectorRequestTelemetryMiddleware
+    public sealed class GraftCodeAppInsightsConnectorRequestTelemetryMiddleware
     {
         private readonly RequestDelegate _next;
-        private readonly GraftAppInsightsConnectorPipeline _telemetry;
+        private readonly GraftCodeAppInsightsConnectorPipeline _telemetry;
 
-        public GraftAppInsightsConnectorRequestTelemetryMiddleware(
+        public GraftCodeAppInsightsConnectorRequestTelemetryMiddleware(
             RequestDelegate next,
-            GraftAppInsightsConnectorPipeline telemetry)
+            GraftCodeAppInsightsConnectorPipeline telemetry)
         {
             _next = next;
             _telemetry = telemetry;

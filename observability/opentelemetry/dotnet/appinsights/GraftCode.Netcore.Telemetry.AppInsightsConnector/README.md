@@ -1,11 +1,11 @@
-# Graft App Insights Connector
+# GraftCode App Insights Connector
 
 Configure Application Insights for an application and Graft bridge spans with one call:
 
 ```csharp
-using Graft.Netcore.Telemetry.AppInsightsConnector;
+using GraftCode.Netcore.Telemetry.AppInsightsConnector;
 
-using var telemetry = GraftAppInsightsConnector.Start("MyService");
+using var telemetry = GraftCodeAppInsightsConnector.Start("MyService");
 using var activity = telemetry.StartActivity("MyOperation");
 
 telemetry.Logger.LogInformation("My operation started");
@@ -16,7 +16,7 @@ and automatically subscribes to the application's source and the `Graftcode`
 source. An explicit connection string and additional activity sources can be configured:
 
 ```csharp
-using var telemetry = GraftAppInsightsConnector.Start(options =>
+using var telemetry = GraftCodeAppInsightsConnector.Start(options =>
 {
     options.ServiceName = "MyService";
     options.ConnectionString = configuration["ApplicationInsights:ConnectionString"];
@@ -27,20 +27,20 @@ using var telemetry = GraftAppInsightsConnector.Start(options =>
 For dependency-injection applications:
 
 ```csharp
-services.AddGraftAppInsightsConnector(options =>
+services.AddGraftCodeAppInsightsConnector(options =>
 {
     options.ServiceName = "MyService";
 });
 ```
 
-Resolve `GraftAppInsightsConnectorPipeline` to access its `ActivitySource`, `Logger`, and
+Resolve `GraftCodeAppInsightsConnectorPipeline` to access its `ActivitySource`, `Logger`, and
 `ForceFlush()` method.
 
 For ASP.NET Core applications, register request telemetry after routing:
 
 ```csharp
 app.UseRouting();
-app.UseGraftAppInsightsConnectorRequestTelemetry();
+app.UseGraftCodeAppInsightsConnectorRequestTelemetry();
 app.MapControllers();
 ```
 

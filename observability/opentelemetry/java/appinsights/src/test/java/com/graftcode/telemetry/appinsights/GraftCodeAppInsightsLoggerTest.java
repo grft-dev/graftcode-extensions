@@ -19,7 +19,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
-class GraftAppInsightsLoggerTest {
+class GraftCodeAppInsightsLoggerTest {
 
     @Test
     void template_IsRendered_AndPlaceholdersBecomeAttributes() {
@@ -82,7 +82,7 @@ class GraftAppInsightsLoggerTest {
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         InMemoryLogRecordExporter exporter = InMemoryLogRecordExporter.create();
         SdkLoggerProvider provider = SdkLoggerProvider.builder().addLogRecordProcessor(SimpleLogRecordProcessor.create(exporter)).build();
-        GraftAppInsightsLogger logger = new GraftAppInsightsLogger(
+        GraftCodeAppInsightsLogger logger = new GraftCodeAppInsightsLogger(
                 "TestGgJavaWebApi",
                 provider.get("TestGgJavaWebApi"),
                 LogsLevel.Info,
