@@ -2,7 +2,7 @@
 
 This plugin carries Graftcode Gateway calls over Apache Kafka. It implements `Hypertube::Native::Interfaces::ITransport` and `GraftcodeGateway::IServer`, and exports the transport C ABI `CreateTransport` / `DestroyTransport` / `TransportSendCommand` / `TransportFreeBuffer` (`GraftcodePluginsInterfaces/TransportPluginAbi.h`) and `CreateServer` / `DestroyServer`.
 
-It is written in C++. CMake FetchContent builds nlohmann/json `v3.12.0`, librdkafka `v2.8.0` (static `rdkafka++`), zlib `v1.3.1`, and zstd `v1.5.6`, all linked into the plugin. OpenSSL is static too: on Windows configure with the vcpkg toolchain so it is the `/MT` build from `kafka/vcpkg.json` (the OpenSSL in `Program Files` is `/MD`); on Linux and macOS the build uses the PIC static archive from the system or Homebrew. LZ4 and Snappy are the copies compiled into librdkafka. The first configure needs network access.
+It is written in C++. CMake FetchContent builds nlohmann/json `v3.12.0`, librdkafka `v2.8.0` (static `rdkafka++`), zlib `v1.3.1`, and zstd `v1.5.6`, all linked into the plugin. OpenSSL is static too: on Windows configure with the vcpkg toolchain so it is the `/MT` build from `communication-plugins/kafka/vcpkg.json` (the OpenSSL in `Program Files` is `/MD`); on Linux and macOS the build uses the PIC static archive from the system or Homebrew. LZ4 and Snappy are the copies compiled into librdkafka. The first configure needs network access.
 
 Windows and macOS release archives contain only `KafkaPlugin.dll` or `libKafkaPlugin.dylib`. The Linux archive contains `libKafkaPlugin.so` plus `libsasl2.so.2` and `libsasl2.so.2.0.25`. Cyrus SASL loads mechanism modules at runtime, so `libsasl2` stays shared; copy those two files next to the plugin. The plugin's own TLS uses the static OpenSSL. On Windows the MSVC CRT is static (`/MT`), so the VC++ Redistributable is not required. Clients do not install OpenSSL, zlib, zstd, or librdkafka separately.
 
@@ -29,19 +29,19 @@ cmake --build build --config Release
 
 Output:
 
-- Windows: `kafka/build/KafkaPlugin/KafkaPlugin.dll` — config `"name": "KafkaPlugin"`
-- Linux/macOS: `kafka/build/KafkaPlugin/libKafkaPlugin.so` or `.dylib` — config `"name": "libKafkaPlugin"`
+- Windows: `communication-plugins/kafka/build/KafkaPlugin/KafkaPlugin.dll` — config `"name": "KafkaPlugin"`
+- Linux/macOS: `communication-plugins/kafka/build/KafkaPlugin/libKafkaPlugin.so` or `.dylib` — config `"name": "libKafkaPlugin"`
 
 Download `gg` from https://github.com/grft-dev/graftcode-gateway/releases/.
 
 ## Local broker
 
-Compose files are in [`samples/kafka`](../samples/kafka) (see [samples/README.md](../samples/README.md)), not in this directory.
+Compose files are in [`communication-plugin-samples/kafka`](../../communication-plugin-samples/kafka) (see [communication-plugin-samples/README.md](../../communication-plugin-samples/README.md)), not in this directory.
 
 Apache Kafka (KRaft), broker `localhost:9092`, UI `http://localhost:8080`:
 
 ```bash
-cd ../samples/kafka
+cd ../../communication-plugin-samples/kafka
 docker compose up -d
 ./scripts/create-topics.sh
 ```

@@ -6,14 +6,14 @@ Official open-source Graftcode Gateway plugins. Each plugin carries Graft calls 
 
 | Plugin | Channel | Modes | Local setup | Docs |
 |--------|---------|-------|-------------|------|
-| [rabbitmq](rabbitmq/Readme.md) | RabbitMQ (AMQP 0-9-1) | request/reply | [samples/rabbitmq](samples/rabbitmq) | [Readme](rabbitmq/Readme.md) |
-| [servicebus](servicebus/Readme.md) | Azure Service Bus (AMQP 1.0) | request/reply and one-way | [samples/servicebus](samples/servicebus) | [Readme](servicebus/Readme.md) |
-| [kafka](kafka/Readme.md) | Apache Kafka | request/reply | [samples/kafka](samples/kafka) | [Readme](kafka/Readme.md) |
-| [sqs](sqs/Readme.md) | Amazon SQS | request/reply and one-way | [samples/sqs](samples/sqs) (LocalStack) | [Readme](sqs/Readme.md) |
-| [pubsub](pubsub/Readme.md) | Google Cloud Pub/Sub | request/reply and one-way | [samples/pubsub](samples/pubsub) (Pub/Sub emulator) | [Readme](pubsub/Readme.md) |
+| [rabbitmq](communication-plugins/rabbitmq/Readme.md) | RabbitMQ (AMQP 0-9-1) | request/reply | [communication-plugin-samples/rabbitmq](communication-plugin-samples/rabbitmq) | [Readme](communication-plugins/rabbitmq/Readme.md) |
+| [servicebus](communication-plugins/servicebus/Readme.md) | Azure Service Bus (AMQP 1.0) | request/reply and one-way | [communication-plugin-samples/servicebus](communication-plugin-samples/servicebus) | [Readme](communication-plugins/servicebus/Readme.md) |
+| [kafka](communication-plugins/kafka/Readme.md) | Apache Kafka | request/reply | [communication-plugin-samples/kafka](communication-plugin-samples/kafka) | [Readme](communication-plugins/kafka/Readme.md) |
+| [sqs](communication-plugins/sqs/Readme.md) | Amazon SQS | request/reply and one-way | [communication-plugin-samples/sqs](communication-plugin-samples/sqs) (LocalStack) | [Readme](communication-plugins/sqs/Readme.md) |
+| [pubsub](communication-plugins/pubsub/Readme.md) | Google Cloud Pub/Sub | request/reply and one-way | [communication-plugin-samples/pubsub](communication-plugin-samples/pubsub) (Pub/Sub emulator) | [Readme](communication-plugins/pubsub/Readme.md) |
 
 All local Docker setups, ports, and startup instructions are documented in
-[samples/README.md](samples/README.md). Each setup starts its middleware and
+[communication-plugin-samples/README.md](communication-plugin-samples/README.md). Each setup starts its middleware and
 three Gateway servers consuming from the same request destination.
 
 OpenTelemetry / Application Insights lives under [observability/opentelemetry](observability/opentelemetry/dotnet/appinsights/GraftCode.Netcore.Telemetry.AppInsightsConnector/README.md). It is not a transport plugin.
@@ -34,7 +34,7 @@ Each release archive is flat and contains the plugin shared library. Third-party
 
 1. Download the release archive for the platform, or build the plugin (see its Readme).
 2. Put `gg`, the hosted module, and the plugin library in one folder. For Linux Kafka, also put `libsasl2.so.2` and `libsasl2.so.2.0.25` from the same archive there.
-3. Start the Gateway with `--config` and one of the JSON files below. Verified local Docker layouts are available under [samples](samples/README.md).
+3. Start the Gateway with `--config` and one of the JSON files below. Verified local Docker layouts are available under [communication-plugin-samples](communication-plugin-samples/README.md).
 4. Call the Gateway from .NET with the Hypertube SDK (see [Client configuration](#client-configuration)), or open `http://localhost:81/GV` and install the generated package.
 
 How the Gateway loads a plugin is described in the "Plugin server config" section of the [Graftcode Gateway](https://github.com/grft-dev/graftcode-gateway) README.
@@ -43,7 +43,7 @@ How the Gateway loads a plugin is described in the "Plugin server config" sectio
 
 The Gateway `--config` file is the plugin object. The calling runtime wraps that same object in `configurations` → package name → `plugin`. Linux and macOS use a `lib` prefix on `name` (`libRabbitmqPlugin`). Field lists are in each plugin Readme.
 
-RabbitMQ (`rabbitmq/Readme.md`):
+RabbitMQ (`communication-plugins/rabbitmq/Readme.md`):
 
 ```json
 {
@@ -58,7 +58,7 @@ RabbitMQ (`rabbitmq/Readme.md`):
 }
 ```
 
-Service Bus (`servicebus/Readme.md`):
+Service Bus (`communication-plugins/servicebus/Readme.md`):
 
 ```json
 {
@@ -70,7 +70,7 @@ Service Bus (`servicebus/Readme.md`):
 }
 ```
 
-Kafka (`kafka/Readme.md`):
+Kafka (`communication-plugins/kafka/Readme.md`):
 
 ```json
 {
@@ -83,7 +83,7 @@ Kafka (`kafka/Readme.md`):
 }
 ```
 
-SQS (`sqs/Readme.md`, LocalStack):
+SQS (`communication-plugins/sqs/Readme.md`, LocalStack):
 
 ```json
 {
@@ -99,7 +99,7 @@ SQS (`sqs/Readme.md`, LocalStack):
 }
 ```
 
-Pub/Sub (`pubsub/Readme.md`, emulator):
+Pub/Sub (`communication-plugins/pubsub/Readme.md`, emulator):
 
 ```json
 {
@@ -131,10 +131,10 @@ var result = rtmCtx.GetType("netapp.Calculator").CreateInstance()
 
 | Plugin | Client config | `name` |
 |---|---|---|
-| RabbitMQ | [rabbitmq/Readme.md](rabbitmq/Readme.md#client-configuration) | `RabbitmqPlugin` |
-| Kafka | [kafka/Readme.md](kafka/Readme.md#client-configuration) | `KafkaPlugin` |
-| Service Bus | [servicebus/Readme.md](servicebus/Readme.md#client-configuration) | `ServiceBusPlugin` |
-| SQS | [sqs/Readme.md](sqs/Readme.md#client-configuration) | `SqsPlugin` |
-| Pub/Sub | [pubsub/Readme.md](pubsub/Readme.md#client-configuration) | `PubSubPlugin` |
+| RabbitMQ | [rabbitmq/Readme.md](communication-plugins/rabbitmq/Readme.md#client-configuration) | `RabbitmqPlugin` |
+| Kafka | [kafka/Readme.md](communication-plugins/kafka/Readme.md#client-configuration) | `KafkaPlugin` |
+| Service Bus | [servicebus/Readme.md](communication-plugins/servicebus/Readme.md#client-configuration) | `ServiceBusPlugin` |
+| SQS | [sqs/Readme.md](communication-plugins/sqs/Readme.md#client-configuration) | `SqsPlugin` |
+| Pub/Sub | [pubsub/Readme.md](communication-plugins/pubsub/Readme.md#client-configuration) | `PubSubPlugin` |
 
 Part of the [Graftcode](https://github.com/grft-dev/graftcode) project.

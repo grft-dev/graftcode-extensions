@@ -44,8 +44,8 @@ cmake --build build --config Release
 ```
 
 As a result, you will receive:
-- `servicebus/build/ServiceBusPlugin/ServiceBusPlugin.dll`
-- or `servicebus/build/ServiceBusPlugin/libServiceBusPlugin.so` / `.dylib` on Linux/macOS
+- `communication-plugins/servicebus/build/ServiceBusPlugin/ServiceBusPlugin.dll`
+- or `communication-plugins/servicebus/build/ServiceBusPlugin/libServiceBusPlugin.so` / `.dylib` on Linux/macOS
 
 If the generated library is `libServiceBusPlugin.*`, use plugin name: `libServiceBusPlugin`.
 
@@ -126,7 +126,7 @@ dotnet add package -s https://grft.dev/019cf6aa-e2e0-74e7-a2b0-be30db97ccb5__gra
 
 ## Client configuration
 
-A .NET client can call the gateway through the Hypertube SDK. The client config has no `runtime` or `host` keys; the plugin carries the transport. The connection string targets the local emulator ([samples/servicebus](../samples/servicebus)). Use your namespace connection string in Azure.
+A .NET client can call the gateway through the Hypertube SDK. The client config has no `runtime` or `host` keys; the plugin carries the transport. The connection string targets the local emulator ([communication-plugin-samples/servicebus](../../communication-plugin-samples/servicebus)). Use your namespace connection string in Azure.
 
 ```json
 {

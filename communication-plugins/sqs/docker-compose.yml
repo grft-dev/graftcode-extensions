@@ -9,8 +9,8 @@ services:
       DEBUG: 0
     volumes:
       - localstack-data:/var/lib/localstack
-      # Same init script as samples/sqs so `docker compose up` creates the queues.
-      - ../samples/sqs/scripts/init-queues.sh:/etc/localstack/init/ready.d/init-queues.sh
+      # Same init script as communication-plugin-samples/sqs so `docker compose up` creates the queues.
+      - ../../communication-plugin-samples/sqs/scripts/init-queues.sh:/etc/localstack/init/ready.d/init-queues.sh
 
 volumes:
   localstack-data:
