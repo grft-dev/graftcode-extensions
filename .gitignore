@@ -11,3 +11,6 @@ vcpkg_installed/
 
 target/
 *.class
+
+node_modules/
+*.tgz

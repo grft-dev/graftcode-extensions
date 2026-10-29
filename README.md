@@ -16,7 +16,7 @@ All local Docker setups, ports, and startup instructions are documented in
 [samples/README.md](samples/README.md). Each setup starts its middleware and
 three Gateway servers consuming from the same request destination.
 
-OpenTelemetry / Application Insights lives under [observability/opentelemetry](observability/opentelemetry/dotnet/Graft.Netcore.Telemetry.AppInsightsConnector/README.md). It is not a transport plugin.
+OpenTelemetry / Application Insights lives under [observability/opentelemetry](observability/opentelemetry/dotnet/appinsights/Graft.Netcore.Telemetry.AppInsightsConnector/README.md). It is not a transport plugin.
 
 Use RabbitMQ or Kafka when you already run that broker. Use Service Bus or SQS when the deployment is already on Azure or AWS. Use Pub/Sub when the deployment is already on Google Cloud. SQS and Pub/Sub each need one reply destination per client process; Service Bus can share one session-enabled reply queue.
 
