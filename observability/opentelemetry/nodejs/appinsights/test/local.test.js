@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { isSpanContextValid } from '@opentelemetry/api'
 import { HypertubePipeline } from 'hypertube-nodejs-sdk/observability'
-import { useGraftAppInsights } from '../src/index.js'
+import { useGraftCodeAppInsights } from '../src/index.js'
 
 test('without a connection string, traces locally, warns, and still registers Graftcode instrumentation', async () => {
     delete process.env.APPLICATIONINSIGHTS_CONNECTION_STRING
@@ -15,15 +15,15 @@ test('without a connection string, traces locally, warns, and still registers Gr
 
     let telemetry
     try {
-        telemetry = useGraftAppInsights({ serviceName: 'ConnectorLocalTest' })
+        telemetry = useGraftCodeAppInsights({ serviceName: 'ConnectorLocalTest' })
     } finally {
         process.stdout.write = originalWrite
     }
 
     assert.equal(telemetry.isExporting, false)
     assert.ok(written.some((line) => line.startsWith('warn: ConnectorLocalTest: Application Insights telemetry')))
-    assert.equal(useGraftAppInsights({ serviceName: 'ConnectorLocalTest' }), telemetry)
-    assert.throws(() => useGraftAppInsights({ serviceName: 'Other' }), /already started/)
+    assert.equal(useGraftCodeAppInsights({ serviceName: 'ConnectorLocalTest' }), telemetry)
+    assert.throws(() => useGraftCodeAppInsights({ serviceName: 'Other' }), /already started/)
     assert.ok(HypertubePipeline.middleware.some((middleware) => middleware.name === 'GraftcodeInstrumentation'))
 
     const span = telemetry.tracer.startSpan('work')

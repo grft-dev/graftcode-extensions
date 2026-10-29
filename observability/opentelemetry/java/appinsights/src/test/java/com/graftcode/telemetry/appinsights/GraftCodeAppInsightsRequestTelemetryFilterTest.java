@@ -18,7 +18,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
-class GraftAppInsightsRequestTelemetryFilterTest {
+class GraftCodeAppInsightsRequestTelemetryFilterTest {
     private static final String TRACE_ID = "0af7651916cd43dd8448eb211c80319c";
     private static final String PARENT_SPAN_ID = "b7ad6b7169203331";
 
@@ -26,14 +26,14 @@ class GraftAppInsightsRequestTelemetryFilterTest {
     void requestOperationName_UsesControllerWhenAvailable() {
         Assertions.assertEquals(
                 "TestGgJavaWebApi.Fetch",
-                GraftAppInsightsRequestTelemetryFilter.resolveOperationName("TestGgJavaWebApi", "GET", "/api/fetch/Pawel6", "Fetch"));
+                GraftCodeAppInsightsRequestTelemetryFilter.resolveOperationName("TestGgJavaWebApi", "GET", "/api/fetch/Pawel6", "Fetch"));
     }
 
     @Test
     void requestOperationName_FallsBackToMethodAndPath() {
         Assertions.assertEquals(
                 "TestGgJavaWebApi GET /health",
-                GraftAppInsightsRequestTelemetryFilter.resolveOperationName("TestGgJavaWebApi", "GET", "/health", null));
+                GraftCodeAppInsightsRequestTelemetryFilter.resolveOperationName("TestGgJavaWebApi", "GET", "/health", null));
     }
 
     @Test
@@ -41,7 +41,7 @@ class GraftAppInsightsRequestTelemetryFilterTest {
         Map<String, Object> attributes = new HashMap<>();
         attributes.put("org.springframework.web.servlet.HandlerMapping.bestMatchingHandler", new FakeHandlerMethod(FetchController.class));
 
-        Assertions.assertEquals("Fetch", GraftAppInsightsRequestTelemetryFilter.resolveControllerName(request("/api/fetch/x", attributes, Collections.<String, String>emptyMap())));
+        Assertions.assertEquals("Fetch", GraftCodeAppInsightsRequestTelemetryFilter.resolveControllerName(request("/api/fetch/x", attributes, Collections.<String, String>emptyMap())));
     }
 
     @Test
@@ -56,10 +56,10 @@ class GraftAppInsightsRequestTelemetryFilterTest {
 
             FilterChain chain = (req, res) -> {
                 traceIdInsideChain.set(Span.current().getSpanContext().getTraceId());
-                attributes.put(GraftAppInsightsRequestTelemetryFilter.CONTROLLER_ATTRIBUTE, "Fetch");
+                attributes.put(GraftCodeAppInsightsRequestTelemetryFilter.CONTROLLER_ATTRIBUTE, "Fetch");
             };
 
-            new GraftAppInsightsRequestTelemetryFilter(telemetry.pipeline).doFilter(request, response(200), chain);
+            new GraftCodeAppInsightsRequestTelemetryFilter(telemetry.pipeline).doFilter(request, response(200), chain);
 
             SpanData span = telemetry.spans().get(0);
             Assertions.assertEquals("TestService.Fetch", span.getName());
@@ -77,7 +77,7 @@ class GraftAppInsightsRequestTelemetryFilterTest {
     @Test
     void serverErrors_MarkTheSpanAsFailed() throws Exception {
         try (InMemoryTelemetry telemetry = new InMemoryTelemetry(LogsLevel.Info)) {
-            new GraftAppInsightsRequestTelemetryFilter(telemetry.pipeline).doFilter(
+            new GraftCodeAppInsightsRequestTelemetryFilter(telemetry.pipeline).doFilter(
                     request("/boom", new HashMap<>(), Collections.<String, String>emptyMap()),
                     response(503),
                     (req, res) -> {
@@ -92,7 +92,7 @@ class GraftAppInsightsRequestTelemetryFilterTest {
     @Test
     void exceptions_AreRecorded_AndRethrown() {
         try (InMemoryTelemetry telemetry = new InMemoryTelemetry(LogsLevel.Info)) {
-            Assertions.assertThrows(IllegalStateException.class, () -> new GraftAppInsightsRequestTelemetryFilter(telemetry.pipeline).doFilter(
+            Assertions.assertThrows(IllegalStateException.class, () -> new GraftCodeAppInsightsRequestTelemetryFilter(telemetry.pipeline).doFilter(
                     request("/boom", new HashMap<>(), Collections.<String, String>emptyMap()),
                     response(200),
                     (req, res) -> {

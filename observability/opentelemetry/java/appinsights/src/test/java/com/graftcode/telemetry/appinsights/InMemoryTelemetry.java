@@ -16,10 +16,10 @@ import java.util.List;
 final class InMemoryTelemetry implements AutoCloseable {
     private final InMemorySpanExporter spans = InMemorySpanExporter.create();
     private final InMemoryLogRecordExporter logs = InMemoryLogRecordExporter.create();
-    final GraftAppInsightsConnectorPipeline pipeline;
+    final GraftCodeAppInsightsConnectorPipeline pipeline;
 
     InMemoryTelemetry(LogsLevel minimumLogLevel) {
-        GraftAppInsightsConnectorOptions options = new GraftAppInsightsConnectorOptions();
+        GraftCodeAppInsightsConnectorOptions options = new GraftCodeAppInsightsConnectorOptions();
         options.setServiceName("TestService");
         options.setEnableConsoleLogging(false);
         options.setMinimumLogLevel(minimumLogLevel);
@@ -29,7 +29,7 @@ final class InMemoryTelemetry implements AutoCloseable {
                 .setLoggerProvider(SdkLoggerProvider.builder().addLogRecordProcessor(SimpleLogRecordProcessor.create(logs)).build())
                 .build();
 
-        pipeline = new GraftAppInsightsConnectorPipeline(options, sdk);
+        pipeline = new GraftCodeAppInsightsConnectorPipeline(options, sdk);
     }
 
     List<SpanData> spans() {

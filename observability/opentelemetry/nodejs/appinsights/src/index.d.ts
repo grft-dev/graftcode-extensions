@@ -5,7 +5,7 @@ import type { GraftcodeInstrumentationConfig } from 'graftcode-instrumentation'
 
 export type LogAttributes = Record<string, string | number | boolean | undefined>
 
-export interface GraftAppInsightsOptions {
+export interface GraftCodeAppInsightsOptions {
     /** Shown as the cloud role name in Application Insights. */
     serviceName: string
     /** Defaults to `APPLICATIONINSIGHTS_CONNECTION_STRING`. */
@@ -26,19 +26,19 @@ export interface GraftAppInsightsOptions {
     azureMonitor?: AzureMonitorOpenTelemetryOptions
 }
 
-export interface GraftAppLogger {
+export interface GraftCodeAppLogger {
     debug(message: string, attributes?: LogAttributes): void
     info(message: string, attributes?: LogAttributes): void
     warn(message: string, attributes?: LogAttributes): void
     error(message: string, errorOrAttributes?: Error | LogAttributes): void
 }
 
-export interface GraftTelemetry {
+export interface GraftCodeTelemetry {
     readonly serviceName: string
     /** Whether telemetry is sent to Application Insights. */
     readonly isExporting: boolean
     readonly tracer: Tracer
-    readonly logger: GraftAppLogger
+    readonly logger: GraftCodeAppLogger
     /** Sends buffered telemetry now. */
     flush(): Promise<void>
     /** Flushes and stops telemetry. Safe to call more than once. */
@@ -49,4 +49,4 @@ export interface GraftTelemetry {
  * Starts OpenTelemetry with the Azure Monitor exporters and Graftcode instrumentation. Call it once,
  * as early as possible (for a web server, before the HTTP framework is imported, e.g. via `node --import`).
  */
-export declare function useGraftAppInsights(options: GraftAppInsightsOptions): GraftTelemetry
+export declare function useGraftCodeAppInsights(options: GraftCodeAppInsightsOptions): GraftCodeTelemetry

@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="GraftCode.Netcore.Telemetry.AppInsightsConnector.Tests/GraftCode.Netcore.Telemetry.AppInsightsConnector.Tests.csproj" />
+  <Project Path="GraftCode.Netcore.Telemetry.AppInsightsConnector/GraftCode.Netcore.Telemetry.AppInsightsConnector.csproj" />
+</Solution>

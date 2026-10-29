@@ -4,7 +4,7 @@ import com.hypertube.utils.logging.LogsLevel;
 
 import java.util.function.Function;
 
-public final class GraftAppInsightsConnectorOptions {
+public final class GraftCodeAppInsightsConnectorOptions {
     public static final String CONNECTION_STRING_VARIABLE = "APPLICATIONINSIGHTS_CONNECTION_STRING";
 
     private String serviceName = "";

@@ -5,13 +5,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion Condition="'$(TargetFramework)' == 'netstandard2.1'">10.0</LangVersion>
-    <Title>Graft App Insights Connector</Title>
-    <Description>One-line Application Insights telemetry setup for Graft applications.</Description>
+    <Title>GraftCode App Insights Connector</Title>
+    <Description>One-line Application Insights telemetry setup for GraftCode applications.</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="Graft.Netcore.Telemetry.AppInsightsConnector.Tests" />
+    <InternalsVisibleTo Include="GraftCode.Netcore.Telemetry.AppInsightsConnector.Tests" />
   </ItemGroup>
 
   <ItemGroup>

@@ -7,9 +7,9 @@ using OpenTelemetry.Logs;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 
-namespace Graft.Netcore.Telemetry.AppInsightsConnector
+namespace GraftCode.Netcore.Telemetry.AppInsightsConnector
 {
-    public sealed class GraftAppInsightsConnectorPipeline : IDisposable
+    public sealed class GraftCodeAppInsightsConnectorPipeline : IDisposable
     {
         private readonly object _flushGate = new object();
         private readonly ServiceProvider _loggingServices;
@@ -17,7 +17,7 @@ namespace Graft.Netcore.Telemetry.AppInsightsConnector
         private readonly TracerProvider _tracerProvider;
         private bool _disposed;
 
-        internal GraftAppInsightsConnectorPipeline(GraftAppInsightsConnectorOptions options)
+        internal GraftCodeAppInsightsConnectorPipeline(GraftCodeAppInsightsConnectorOptions options)
         {
             options.Validate();
 
@@ -147,12 +147,12 @@ namespace Graft.Netcore.Telemetry.AppInsightsConnector
             ActivitySource.Dispose();
         }
 
-        private void WarnAboutMissingConnectionString(GraftAppInsightsConnectorOptions options)
+        private void WarnAboutMissingConnectionString(GraftCodeAppInsightsConnectorOptions options)
         {
             const string message =
                 "Application Insights telemetry for {ServiceName} is disabled: no connection string was configured. "
                 + "Set APPLICATIONINSIGHTS_CONNECTION_STRING in this process or assign "
-                + "GraftAppInsightsConnectorOptions.ConnectionString.";
+                + "GraftCodeAppInsightsConnectorOptions.ConnectionString.";
 
             Logger.LogWarning(message, ServiceName);
 

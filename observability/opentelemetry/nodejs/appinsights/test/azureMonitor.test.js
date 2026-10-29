@@ -2,13 +2,13 @@ import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { test } from 'node:test'
 import { TraceFlags, context, propagation, trace } from '@opentelemetry/api'
-import { useGraftAppInsights } from '../src/index.js'
+import { useGraftCodeAppInsights } from '../src/index.js'
 
 const CONNECTION_STRING =
     'InstrumentationKey=00000000-0000-0000-0000-000000000000;IngestionEndpoint=http://127.0.0.1:9/;LiveEndpoint=http://127.0.0.1:9/'
 
 test('with a connection string, exports to Azure Monitor and keeps every trace by default', async () => {
-    const telemetry = useGraftAppInsights({
+    const telemetry = useGraftCodeAppInsights({
         serviceName: 'ConnectorAzureTest',
         connectionString: CONNECTION_STRING,
         console: false,

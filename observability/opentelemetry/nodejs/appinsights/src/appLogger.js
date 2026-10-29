@@ -11,14 +11,14 @@ const SEVERITIES = {
 
 /**
  * @typedef {Record<string, string | number | boolean | undefined>} LogAttributes
- * @typedef {import('./index.js').GraftAppLogger} GraftAppLogger
+ * @typedef {import('./index.js').GraftCodeAppLogger} GraftCodeAppLogger
  */
 
 /**
  * @param {string} serviceName
  * @param {number} minimumLevel
  * @param {boolean} toConsole
- * @returns {GraftAppLogger}
+ * @returns {GraftCodeAppLogger}
  */
 export function createAppLogger(serviceName, minimumLevel, toConsole) {
     const logger = logs.getLogger(serviceName)

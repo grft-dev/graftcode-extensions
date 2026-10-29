@@ -4,7 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Xunit;
 
-namespace Graft.Netcore.Telemetry.AppInsightsConnector.Tests
+namespace GraftCode.Netcore.Telemetry.AppInsightsConnector.Tests
 {
     [CollectionDefinition(EnvironmentCollection.Name, DisableParallelization = true)]
     public sealed class EnvironmentCollection
@@ -13,7 +13,7 @@ namespace Graft.Netcore.Telemetry.AppInsightsConnector.Tests
     }
 
     [Collection(EnvironmentCollection.Name)]
-    public sealed class GraftAppInsightsConnectorTests
+    public sealed class GraftCodeAppInsightsConnectorTests
     {
         private const string LocalConnectionString =
             "InstrumentationKey=00000000-0000-0000-0000-000000000001;"
@@ -23,7 +23,7 @@ namespace Graft.Netcore.Telemetry.AppInsightsConnector.Tests
         public void Start_RequiresAServiceName()
         {
             Assert.Throws<InvalidOperationException>(
-                () => GraftAppInsightsConnector.Start(new GraftAppInsightsConnectorOptions()));
+                () => GraftCodeAppInsightsConnector.Start(new GraftCodeAppInsightsConnectorOptions()));
         }
 
         [Fact]
@@ -39,7 +39,7 @@ namespace Graft.Netcore.Telemetry.AppInsightsConnector.Tests
                     "APPLICATIONINSIGHTS_CONNECTION_STRING",
                     environmentValue);
 
-                var options = new GraftAppInsightsConnectorOptions
+                var options = new GraftCodeAppInsightsConnectorOptions
                 {
                     ServiceName = "test",
                     ConnectionString = explicitValue,
@@ -58,7 +58,7 @@ namespace Graft.Netcore.Telemetry.AppInsightsConnector.Tests
         [Fact]
         public void Sources_AlwaysContainTheServiceAndGraftcode()
         {
-            var options = new GraftAppInsightsConnectorOptions { ServiceName = "test.service" };
+            var options = new GraftCodeAppInsightsConnectorOptions { ServiceName = "test.service" };
             options.ActivitySourceNames.Add("custom.source");
 
             var sources = options.GetActivitySourceNames();
@@ -77,7 +77,7 @@ namespace Graft.Netcore.Telemetry.AppInsightsConnector.Tests
             {
                 Environment.SetEnvironmentVariable("APPLICATIONINSIGHTS_CONNECTION_STRING", null);
 
-                using var pipeline = GraftAppInsightsConnector.Start(options =>
+                using var pipeline = GraftCodeAppInsightsConnector.Start(options =>
                 {
                     options.ServiceName = "test.service";
                     options.EnableConsoleLogging = false;
@@ -99,7 +99,7 @@ namespace Graft.Netcore.Telemetry.AppInsightsConnector.Tests
         [Fact]
         public void EveryTraceIsRecorded_SoLogsAreNotSampledAway()
         {
-            using var pipeline = GraftAppInsightsConnector.Start(options =>
+            using var pipeline = GraftCodeAppInsightsConnector.Start(options =>
             {
                 options.ServiceName = "test.service";
                 options.EnableConsoleLogging = false;
@@ -118,7 +118,7 @@ namespace Graft.Netcore.Telemetry.AppInsightsConnector.Tests
         [Fact]
         public void RateLimitedSampling_CanBeOptedInto()
         {
-            using var pipeline = GraftAppInsightsConnector.Start(options =>
+            using var pipeline = GraftCodeAppInsightsConnector.Start(options =>
             {
                 options.ServiceName = "test.service";
                 options.EnableConsoleLogging = false;
@@ -142,7 +142,7 @@ namespace Graft.Netcore.Telemetry.AppInsightsConnector.Tests
         [Fact]
         public void ForceFlush_CoversLogsAsWellAsTraces()
         {
-            using var pipeline = GraftAppInsightsConnector.Start(options =>
+            using var pipeline = GraftCodeAppInsightsConnector.Start(options =>
             {
                 options.ServiceName = "test.service";
                 options.EnableConsoleLogging = false;
@@ -165,7 +165,7 @@ namespace Graft.Netcore.Telemetry.AppInsightsConnector.Tests
             {
                 Environment.SetEnvironmentVariable("APPLICATIONINSIGHTS_CONNECTION_STRING", null);
 
-                using var pipeline = GraftAppInsightsConnector.Start(options =>
+                using var pipeline = GraftCodeAppInsightsConnector.Start(options =>
                 {
                     options.ServiceName = "test.service";
                     options.EnableConsoleLogging = false;
@@ -189,7 +189,7 @@ namespace Graft.Netcore.Telemetry.AppInsightsConnector.Tests
             context.Request.Path = "/api/fetch/Pawel6";
             context.Request.RouteValues["controller"] = "Fetch";
 
-            var name = GraftAppInsightsConnectorRequestTelemetryMiddleware.ResolveOperationName(
+            var name = GraftCodeAppInsightsConnectorRequestTelemetryMiddleware.ResolveOperationName(
                 context,
                 "TestGgWebApi");
 
@@ -203,7 +203,7 @@ namespace Graft.Netcore.Telemetry.AppInsightsConnector.Tests
             context.Request.Method = "GET";
             context.Request.Path = "/health";
 
-            var name = GraftAppInsightsConnectorRequestTelemetryMiddleware.ResolveOperationName(
+            var name = GraftCodeAppInsightsConnectorRequestTelemetryMiddleware.ResolveOperationName(
                 context,
                 "TestGgWebApi");
 
@@ -214,7 +214,7 @@ namespace Graft.Netcore.Telemetry.AppInsightsConnector.Tests
         public void DependencyInjection_RegistersOnePipeline()
         {
             var services = new ServiceCollection();
-            services.AddGraftAppInsightsConnector(options =>
+            services.AddGraftCodeAppInsightsConnector(options =>
             {
                 options.ServiceName = "test.service";
                 options.EnableConsoleLogging = false;
@@ -223,8 +223,8 @@ namespace Graft.Netcore.Telemetry.AppInsightsConnector.Tests
             using var provider = services.BuildServiceProvider();
 
             Assert.Same(
-                provider.GetRequiredService<GraftAppInsightsConnectorPipeline>(),
-                provider.GetRequiredService<GraftAppInsightsConnectorPipeline>());
+                provider.GetRequiredService<GraftCodeAppInsightsConnectorPipeline>(),
+                provider.GetRequiredService<GraftCodeAppInsightsConnectorPipeline>());
         }
     }
 }

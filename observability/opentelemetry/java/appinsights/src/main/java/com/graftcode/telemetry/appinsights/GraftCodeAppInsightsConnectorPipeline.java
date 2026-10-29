@@ -23,18 +23,18 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.concurrent.TimeUnit;
 
-public final class GraftAppInsightsConnectorPipeline implements AutoCloseable {
+public final class GraftCodeAppInsightsConnectorPipeline implements AutoCloseable {
     private static final int DEFAULT_FLUSH_MILLISECONDS = 5000;
     private static final String MISSING_CONNECTION_STRING =
             "Application Insights telemetry for {ServiceName} is disabled: no connection string was configured. "
-                    + "Set " + GraftAppInsightsConnectorOptions.CONNECTION_STRING_VARIABLE + " in this process or call "
-                    + "GraftAppInsightsConnectorOptions.setConnectionString.";
+                    + "Set " + GraftCodeAppInsightsConnectorOptions.CONNECTION_STRING_VARIABLE + " in this process or call "
+                    + "GraftCodeAppInsightsConnectorOptions.setConnectionString.";
 
     private final Object flushGate = new Object();
     private final String serviceName;
     private final OpenTelemetrySdk sdk;
     private final Tracer tracer;
-    private final GraftAppInsightsLogger logger;
+    private final GraftCodeAppInsightsLogger logger;
     private final GraftcodeInstrumentation instrumentation;
     private final boolean exportingToAppInsights;
     private final Thread shutdownHook;
@@ -42,11 +42,11 @@ public final class GraftAppInsightsConnectorPipeline implements AutoCloseable {
     private final Thread.UncaughtExceptionHandler uncaughtHandler;
     private boolean closed;
 
-    GraftAppInsightsConnectorPipeline(GraftAppInsightsConnectorOptions options) {
+    GraftCodeAppInsightsConnectorPipeline(GraftCodeAppInsightsConnectorOptions options) {
         this(options, null);
     }
 
-    GraftAppInsightsConnectorPipeline(GraftAppInsightsConnectorOptions options, OpenTelemetrySdk providedSdk) {
+    GraftCodeAppInsightsConnectorPipeline(GraftCodeAppInsightsConnectorOptions options, OpenTelemetrySdk providedSdk) {
         options.validate();
 
         serviceName = options.getServiceName();
@@ -62,7 +62,7 @@ public final class GraftAppInsightsConnectorPipeline implements AutoCloseable {
         }
 
         tracer = sdk.getTracer(serviceName);
-        logger = new GraftAppInsightsLogger(
+        logger = new GraftCodeAppInsightsLogger(
                 serviceName,
                 sdk.getLogsBridge().get(serviceName),
                 options.getMinimumLogLevel(),
@@ -93,7 +93,7 @@ public final class GraftAppInsightsConnectorPipeline implements AutoCloseable {
         return sdk;
     }
 
-    public GraftAppInsightsLogger getLogger() {
+    public GraftCodeAppInsightsLogger getLogger() {
         return logger;
     }
 
@@ -175,7 +175,7 @@ public final class GraftAppInsightsConnectorPipeline implements AutoCloseable {
                 .build();
     }
 
-    private void warnAboutMissingConnectionString(GraftAppInsightsConnectorOptions options) {
+    private void warnAboutMissingConnectionString(GraftCodeAppInsightsConnectorOptions options) {
         logger.log(LogsLevel.Warning, MISSING_CONNECTION_STRING, serviceName);
 
         if (!options.isEnableConsoleLogging()) {
