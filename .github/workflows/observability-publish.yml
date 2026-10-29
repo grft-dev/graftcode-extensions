@@ -1,0 +1,128 @@
+name: Observability Packages
+
+on:
+  push:
+    branches: ["main"]
+    tags:
+      - "observability-v*"
+    paths:
+      - "observability/**"
+      - ".github/workflows/observability-publish.yml"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "observability/**"
+      - ".github/workflows/observability-publish.yml"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Package version to publish (for example 1.0.0)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Build and test observability packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Test .NET instrumentation
+        run: dotnet test observability/Instrumentation/dotnet/tests/Graftcode.Instrumentation.Tests/Graftcode.Instrumentation.Tests.csproj --configuration Release
+
+      - name: Test .NET AppInsights connector
+        run: dotnet test observability/opentelemetry/dotnet/appinsights/GraftCode.Netcore.Telemetry.AppInsightsConnector.Tests/GraftCode.Netcore.Telemetry.AppInsightsConnector.Tests.csproj --configuration Release
+
+      - name: Test Java instrumentation
+        run: mvn --batch-mode --file observability/Instrumentation/java/pom.xml install
+
+      - name: Test Java AppInsights connector
+        run: mvn --batch-mode --file observability/opentelemetry/java/appinsights/pom.xml verify
+
+  publish:
+    name: Publish observability packages
+    needs: validate
+    if: >-
+      success() && (
+        startsWith(github.ref, 'refs/tags/observability-v') ||
+        github.event_name == 'workflow_dispatch'
+      )
+    runs-on: ubuntu-latest
+    environment: packages
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        env:
+          DISPATCH_VERSION: ${{ inputs.version }}
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            version="${DISPATCH_VERSION}"
+          else
+            version="${GITHUB_REF_NAME#observability-v}"
+          fi
+          if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid semantic version: ${version}" >&2
+            exit 1
+          fi
+          echo "value=${version}" >> "${GITHUB_OUTPUT}"
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Pack and publish NuGet packages
+        shell: bash
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/nuget
+          dotnet pack observability/Instrumentation/dotnet/src/Graftcode.Instrumentation/Graftcode.Instrumentation.csproj \
+            --configuration Release --property:PackageVersion="${VERSION}" --output artifacts/nuget
+          dotnet pack observability/opentelemetry/dotnet/appinsights/GraftCode.Netcore.Telemetry.AppInsightsConnector/GraftCode.Netcore.Telemetry.AppInsightsConnector.csproj \
+            --configuration Release --property:PackageVersion="${VERSION}" --output artifacts/nuget
+          dotnet nuget push artifacts/nuget/*.nupkg \
+            --api-key "${NUGET_API_KEY}" \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          server-id: central
+          server-username: MAVEN_CENTRAL_USERNAME
+          server-password: MAVEN_CENTRAL_PASSWORD
+          gpg-private-key: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
+          gpg-passphrase: MAVEN_GPG_PASSPHRASE
+
+      - name: Publish Maven Central packages
+        shell: bash
+        env:
+          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --file observability/Instrumentation/java/pom.xml \
+            --activate-profiles publish --define revision="${VERSION}" deploy
+          mvn --batch-mode --file observability/opentelemetry/java/appinsights/pom.xml \
+            --activate-profiles publish --define revision="${VERSION}" \
+            --define graftcode.instrumentation.version="${VERSION}" deploy

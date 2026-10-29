@@ -1,4 +1,4 @@
-# Local Google Cloud Pub/Sub emulator. Sample configs live in samples/pubsub.
+# Local Google Cloud Pub/Sub emulator. Sample configs live in communication-plugin-samples/pubsub.
 services:
   pubsub-emulator:
     image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators

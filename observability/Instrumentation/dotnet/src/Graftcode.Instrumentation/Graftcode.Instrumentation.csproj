@@ -14,6 +14,9 @@
     <PackageTags>Graftcode;OpenTelemetry;Logging</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageProjectUrl>https://github.com/grft-dev/graftcode-extensions</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/grft-dev/graftcode-extensions</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
     <UseHypertubeUtilsProject Condition="'$(UseHypertubeUtilsProject)' == ''">false</UseHypertubeUtilsProject>
   </PropertyGroup>
   <ItemGroup>

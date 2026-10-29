@@ -26,14 +26,14 @@ cmake --build build --config Release
 
 Output:
 
-- Windows: `rabbitmq/build/RabbitmqPlugin/RabbitmqPlugin.dll` — config `"name": "RabbitmqPlugin"`. AMQP-CPP and the VC++ runtime are linked in (`/MT`); the VC++ Redistributable is not required.
-- Linux/macOS: `rabbitmq/build/RabbitmqPlugin/libRabbitmqPlugin.so` or `.dylib` — config `"name": "libRabbitmqPlugin"`
+- Windows: `communication-plugins/rabbitmq/build/RabbitmqPlugin/RabbitmqPlugin.dll` — config `"name": "RabbitmqPlugin"`. AMQP-CPP and the VC++ runtime are linked in (`/MT`); the VC++ Redistributable is not required.
+- Linux/macOS: `communication-plugins/rabbitmq/build/RabbitmqPlugin/libRabbitmqPlugin.so` or `.dylib` — config `"name": "libRabbitmqPlugin"`
 
 Download `gg` from https://github.com/grft-dev/graftcode-gateway/releases/.
 
 ## Local broker
 
-`rabbitmq/Dockerfile` is `rabbitmq:4-management` (AMQP `5672`, management UI `15672`).
+`communication-plugins/rabbitmq/Dockerfile` is `rabbitmq:4-management` (AMQP `5672`, management UI `15672`).
 
 ```bash
 docker build -t graftcode-rabbitmq .
@@ -75,7 +75,7 @@ Open `http://localhost:81/GV` to install the generated package, or call the Gate
 
 ## Client configuration
 
-A .NET client can call the gateway through the Hypertube SDK. The client config has no `runtime` or `host` keys; the plugin carries the transport. Port `5673` and user `graftcode` match [samples/rabbitmq](../samples/rabbitmq). The standalone broker above uses `5672` and `guest`.
+A .NET client can call the gateway through the Hypertube SDK. The client config has no `runtime` or `host` keys; the plugin carries the transport. Port `5673` and user `graftcode` match [communication-plugin-samples/rabbitmq](../../communication-plugin-samples/rabbitmq). The standalone broker above uses `5672` and `guest`.
 
 ```json
 {

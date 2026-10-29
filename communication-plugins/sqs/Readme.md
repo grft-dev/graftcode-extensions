@@ -37,8 +37,8 @@ ctest --test-dir build -C Release --output-on-failure
 
 Output:
 
-- Windows: `sqs/build/SqsPlugin/SqsPlugin.dll` — config `"name": "SqsPlugin"`
-- Linux/macOS: `sqs/build/SqsPlugin/libSqsPlugin.so` or `.dylib` — config `"name": "libSqsPlugin"`
+- Windows: `communication-plugins/sqs/build/SqsPlugin/SqsPlugin.dll` — config `"name": "SqsPlugin"`
+- Linux/macOS: `communication-plugins/sqs/build/SqsPlugin/libSqsPlugin.so` or `.dylib` — config `"name": "libSqsPlugin"`
 
 On Windows, copy `SqsPlugin.dll` next to `gg.exe`. Nothing else from this plugin is required.
 
@@ -46,7 +46,7 @@ Download `gg` from https://github.com/grft-dev/graftcode-gateway/releases/.
 
 ## LocalStack
 
-Sample files and compose live in [`samples/sqs`](../samples/sqs) (see [samples/README.md](../samples/README.md)). From `sqs/` you can also start the same LocalStack; the compose file creates `graft-requests` and `graft-replies`:
+Sample files and compose live in [`communication-plugin-samples/sqs`](../../communication-plugin-samples/sqs) (see [communication-plugin-samples/README.md](../../communication-plugin-samples/README.md)). From `communication-plugins/sqs/` you can also start the same LocalStack; the compose file creates `graft-requests` and `graft-replies`:
 
 ```bash
 docker compose up -d
