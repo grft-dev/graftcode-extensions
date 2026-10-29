@@ -125,7 +125,7 @@
             <id>local-hypertube</id>
             <activation>
                 <file>
-                    <exists>${basedir}/../../../../NewHT/HYPERTUBE/src/jvm/pom.xml</exists>
+                    <exists>${basedir}/../../../../../NewHT/HYPERTUBE/src/jvm/pom.xml</exists>
                 </file>
             </activation>
             <properties>

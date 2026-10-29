@@ -32,7 +32,7 @@
   </ItemGroup>
 
   <PropertyGroup>
-    <GraftcodeInstrumentationProject Condition="'$(GraftcodeInstrumentationProject)' == ''">$(MSBuildThisFileDirectory)..\..\..\Instrumentation\dotnet\src\Graftcode.Instrumentation\Graftcode.Instrumentation.csproj</GraftcodeInstrumentationProject>
+    <GraftcodeInstrumentationProject Condition="'$(GraftcodeInstrumentationProject)' == ''">$(MSBuildThisFileDirectory)..\..\..\..\Instrumentation\dotnet\src\Graftcode.Instrumentation\Graftcode.Instrumentation.csproj</GraftcodeInstrumentationProject>
   </PropertyGroup>
 
   <ItemGroup>
