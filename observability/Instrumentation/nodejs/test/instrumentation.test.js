@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, test } from 'node:test'
 import { SpanKind, SpanStatusCode, context, trace } from '@opentelemetry/api'
 import { InMemoryLogRecordExporter, LoggerProvider, SimpleLogRecordProcessor } from '@opentelemetry/sdk-logs'
@@ -6,6 +7,7 @@ import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-tr
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node'
 import { RuntimeBridge } from 'hypertube-nodejs-sdk'
 import { GraftcodeInstrumentation } from '../src/index.js'
+import { resetLibraryCatalog } from '../src/libraryCatalog.js'
 
 const spanExporter = new InMemorySpanExporter()
 const tracerProvider = new NodeTracerProvider({ spanProcessors: [new SimpleSpanProcessor(spanExporter)] })
@@ -44,7 +46,10 @@ const nodejs = () => RuntimeBridge.inMemory().nodejs()
 const call = async (method, ...args) =>
     (await nodejs().getType('RandomService').invokeStaticMethod(method, ...args).execute()).getValue()
 
-const spanByKind = (kind) => spanExporter.getFinishedSpans().find((span) => span.kind === kind)
+const spans = () => spanExporter.getFinishedSpans()
+const callerSpan = () => spans().find((span) => span.attributes['graft.dependency.type'] === 'Graft')
+const calledSpan = () =>
+    spans().find((span) => span.attributes['hypertube.operation'] && !span.attributes['graft.dependency.type'])
 
 describe('GraftcodeInstrumentation', () => {
     /** @type {GraftcodeInstrumentation} */
@@ -59,6 +64,7 @@ describe('GraftcodeInstrumentation', () => {
     beforeEach(() => {
         spanExporter.reset()
         logExporter.reset()
+        resetLibraryCatalog()
         RequestContext.current.setHeaders({})
     })
 
@@ -66,37 +72,84 @@ describe('GraftcodeInstrumentation', () => {
         instrumentation?.disable()
     })
 
-    test('traces a call as a CLIENT span on the caller and a SERVER span on the called side', async () => {
+    test('traces a call like .NET and Java: Graft <runtime> <channel> on the caller, Service.method on the called side', async () => {
         enable()
 
         assert.equal(await call('fetch', 'x'), 'fetched x')
 
-        const client = spanByKind(SpanKind.CLIENT)
-        const server = spanByKind(SpanKind.SERVER)
-        assert.equal(client.name, 'RandomService/fetch')
-        assert.equal(server.name, 'RandomService/fetch')
-        assert.equal(server.spanContext().traceId, client.spanContext().traceId)
-        assert.equal(server.parentSpanContext?.spanId, client.spanContext().spanId)
+        const caller = callerSpan()
+        const called = calledSpan()
+        assert.equal(caller.name, 'Graft Nodejs inmemory')
+        assert.equal(called.name, 'RandomService.fetch')
+        assert.equal(caller.kind, SpanKind.INTERNAL)
+        assert.equal(called.kind, SpanKind.INTERNAL)
+        assert.equal(called.spanContext().traceId, caller.spanContext().traceId)
+        assert.equal(called.parentSpanContext?.spanId, caller.spanContext().spanId)
         assert.deepEqual(
             {
-                system: client.attributes['rpc.system'],
-                service: client.attributes['rpc.service'],
-                method: client.attributes['rpc.method'],
-                runtime: client.attributes['hypertube.runtime'],
-                commandType: client.attributes['hypertube.command_type'],
-                dependencyType: client.attributes['graft.dependency.type'],
+                dependencyType: caller.attributes['graft.dependency.type'],
+                dependencyTarget: caller.attributes['graft.dependency.target'],
+                operation: caller.attributes['hypertube.operation'],
+                runtime: caller.attributes['hypertube.runtime'],
+                commandType: caller.attributes['hypertube.command_type'],
+                connectionType: caller.attributes['hypertube.connection_type'],
             },
             {
-                system: 'graftcode',
-                service: 'RandomService',
-                method: 'fetch',
+                dependencyType: 'Graft',
+                dependencyTarget: 'Nodejs inmemory',
+                operation: 'RandomService.fetch',
                 runtime: 'Nodejs',
                 commandType: 'InvokeStaticMethod',
-                dependencyType: 'Graft',
+                connectionType: 'InMemory',
             }
         )
-        assert.equal(client.status.code, SpanStatusCode.UNSET)
-        assert.equal(client.attributes['hypertube.request.body'], undefined)
+        for (const span of spans()) {
+            assert.equal(
+                Object.keys(span.attributes).some((key) => key.startsWith('rpc.')),
+                false,
+                'rpc.* makes Azure Monitor report the call as gRPC'
+            )
+        }
+        assert.equal(caller.status.code, SpanStatusCode.UNSET)
+        assert.equal(caller.attributes['hypertube.request.body'], undefined)
+    })
+
+    test('names the library from the libraries option, as a map or a function', async () => {
+        enable({ libraries: { inmemory: 'TestGgNodeLib' } })
+        await call('fetch', 'x')
+        assert.equal(callerSpan().name, 'Graft TestGgNodeLib inmemory')
+        assert.equal(callerSpan().attributes['graft.dependency.target'], 'TestGgNodeLib inmemory')
+
+        instrumentation.disable()
+        spanExporter.reset()
+        const seen = []
+        enable({
+            libraries: (target) => {
+                seen.push(target)
+                return 'FromFunction'
+            },
+        })
+        await call('fetch', 'x')
+        assert.equal(callerSpan().name, 'Graft FromFunction inmemory')
+        assert.deepEqual(seen[0], {
+            target: 'inmemory',
+            channel: 'inmemory',
+            runtime: 'Nodejs',
+            service: 'RandomService',
+            method: 'fetch',
+        })
+    })
+
+    test('names the library and version from a library loaded on the connection', async () => {
+        enable()
+        const libraryPath = fileURLToPath(new URL('./fixtures/calc-lib', import.meta.url))
+
+        const runtime = await nodejs().loadLibrary(libraryPath)
+        const sum = (await runtime.getType('Calculator').invokeStaticMethod('add', 2, 3).execute()).getValue()
+
+        assert.equal(sum, 5)
+        assert.equal(callerSpan().name, 'Graft calc-lib 2.3.4 inmemory')
+        assert.equal(calledSpan().name, 'Calculator.add')
     })
 
     test('joins the active trace and delivers the trace id to RequestContext on the called side', async () => {
@@ -106,8 +159,7 @@ describe('GraftcodeInstrumentation', () => {
         const traceId = await context.with(trace.setSpan(context.active(), parent), () => call('traceId'))
         parent.end()
 
-        const client = spanByKind(SpanKind.CLIENT)
-        assert.equal(client.parentSpanContext?.spanId, parent.spanContext().spanId)
+        assert.equal(callerSpan().parentSpanContext?.spanId, parent.spanContext().spanId)
         assert.equal(traceId, parent.spanContext().traceId)
     })
 
@@ -116,7 +168,7 @@ describe('GraftcodeInstrumentation', () => {
 
         await assert.rejects(call('fail'))
 
-        for (const span of [spanByKind(SpanKind.CLIENT), spanByKind(SpanKind.SERVER)]) {
+        for (const span of [callerSpan(), calledSpan()]) {
             assert.equal(span.status.code, SpanStatusCode.ERROR)
             assert.equal(span.attributes['error.type'], 'TypeError')
             const exception = span.events.find((event) => event.name === 'exception')
@@ -129,17 +181,21 @@ describe('GraftcodeInstrumentation', () => {
 
         await call('fetch', 'y')
 
-        const client = spanByKind(SpanKind.CLIENT)
-        const server = spanByKind(SpanKind.SERVER)
+        const client = callerSpan()
+        const server = calledSpan()
         const records = logExporter.getFinishedLogRecords()
         const invoking = records.find((record) => String(record.body).startsWith('Hypertube invoking'))
         const handling = records.find((record) => String(record.body).startsWith('Hypertube handling'))
+        const handled = records.find((record) => String(record.body).startsWith('Hypertube handled'))
+        const completed = records.find((record) => String(record.body).startsWith('Hypertube completed'))
 
         assert.equal(invoking.body, 'Hypertube invoking InvokeStaticMethod on the Nodejs runtime')
         assert.equal(invoking.severityText, 'INFO')
         assert.equal(invoking.attributes.CommandType, 'InvokeStaticMethod')
         assert.equal(invoking.spanContext?.spanId, client.spanContext().spanId)
+        assert.equal(completed.spanContext?.spanId, client.spanContext().spanId)
         assert.equal(handling.spanContext?.spanId, server.spanContext().spanId)
+        assert.equal(handled.spanContext?.spanId, server.spanContext().spanId)
     })
 
     test('captures redacted request and response bodies only when enabled', async () => {
@@ -147,7 +203,7 @@ describe('GraftcodeInstrumentation', () => {
 
         await call('fetch', 'Bearer abcdefghijklmnop')
 
-        const client = spanByKind(SpanKind.CLIENT)
+        const client = callerSpan()
         const requestBody = client.attributes['hypertube.request.body']
         const request = JSON.parse(requestBody)
         assert.equal(request.type, 'InvokeStaticMethod')

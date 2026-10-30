@@ -8,8 +8,9 @@ import {
     connectionTypeName,
     isCommand,
     runtimeNameOf,
-} from 'hypertube-nodejs-sdk/observability'
+} from 'hypertube-nodejs-sdk/abstractions'
 import { renderBody } from './bodyCapture.js'
+import { describeTarget, recordLibraries } from './libraryCatalog.js'
 import { resolveOperation } from './operation.js'
 
 export const TRACEPARENT_HEADER = 'traceparent'
@@ -17,106 +18,113 @@ export const TRACEID_HEADER = 'traceid'
 
 export const ATTR_REQUEST_BODY = 'hypertube.request.body'
 export const ATTR_RESPONSE_BODY = 'hypertube.response.body'
+export const ATTR_DEPENDENCY_TYPE = 'graft.dependency.type'
+export const ATTR_DEPENDENCY_TARGET = 'graft.dependency.target'
+export const DEPENDENCY_TYPE = 'Graft'
 
-/**
- * @typedef {import('@opentelemetry/api').Span} Span
- * @typedef {import('@opentelemetry/api').Tracer} Tracer
- * @typedef {import('@opentelemetry/api').Context} Context
- * @typedef {import('@opentelemetry/api').Attributes} Attributes
- * @typedef {import('hypertube-nodejs-sdk/observability').HypertubeMiddleware} HypertubeMiddleware
- * @typedef {import('./settings.js').ResolvedSettings} ResolvedSettings
- * @typedef {import('./operation.js').GraftOperation} GraftOperation
- */
+class LiveSpan {
+    constructor(span, settings) {
+        this.span = span
+        this.settings = settings
+    }
 
-/**
- * Creates the Hypertube middleware that wraps each remote call in a span: CLIENT on the calling side,
- * SERVER on the called side, following the OpenTelemetry RPC conventions.
- * @param {() => Tracer} getTracer
- * @param {() => ResolvedSettings} getSettings
- * @returns {HypertubeMiddleware}
- */
-export function createTracingMiddleware(getTracer, getSettings) {
+    complete(response, error) {
+        if (error) {
+            endWithError(this.span, error)
+            return
+        }
+        endWithResponse(this.span, this.settings, response)
+    }
+}
+
+export function createTracingListener(getTracer, getSettings) {
     return {
-        name: 'GraftcodeInstrumentation',
-
-        invoke(call, next) {
+        onExecute(callContext, command, connectionData) {
             const settings = getSettings()
-            const command = LogsCommandResolver.resolveForInvoke(call.command)
-            const operation = resolveOperation(command)
+            const reported = LogsCommandResolver.resolveForInvoke(command)
+            recordLibraries(reported, connectionData)
+            const operation = resolveOperation(reported)
             if (!operation || settings.ignore?.(operation)) {
-                return next()
+                return
             }
 
+            const target = describeTarget(reported, connectionData, operation, settings.libraries)
             const parent = context.active()
             const span = getTracer().startSpan(
-                operation.name,
-                { kind: SpanKind.CLIENT, attributes: clientAttributes(operation, command, call.connectionData) },
+                `Graft ${target}`,
+                {
+                    kind: SpanKind.INTERNAL,
+                    attributes: callerAttributes(operation, reported, connectionData, target),
+                },
                 parent
             )
             const active = trace.setSpan(parent, span)
+            callContext.items.push(new LiveSpan(span, settings))
+            callContext.items.push({
+                wrap(run) {
+                    return context.with(active, run)
+                },
+            })
 
-            if (settings.propagateContext && !hasOwnTraceparent(call.connectionData)) {
-                inject(active, call.headers)
+            if (settings.propagateContext && !hasOwnTraceparent(connectionData)) {
+                inject(active, callContext.outgoingHeaders)
             }
-            captureBody(span, settings, command, ATTR_REQUEST_BODY)
-
-            return settle(span, settings, () => context.with(active, next))
+            captureBody(span, settings, reported, ATTR_REQUEST_BODY)
         },
 
-        handle(call, next) {
+        onResponse(callContext, response) {
+            completeLiveSpans(callContext, response, null)
+        },
+
+        onInvocationError(callContext, error) {
+            completeLiveSpans(callContext, null, error)
+        },
+
+        onProcess(callContext, command) {
             const settings = getSettings()
-            const command = LogsCommandResolver.resolveForHandle(call.command)
-            const operation = resolveOperation(command)
+            const headers = {}
+            const reported = LogsCommandResolver.resolveForHandle(command, headers)
+            const operation = resolveOperation(reported)
             if (!operation || settings.ignore?.(operation)) {
-                return next()
+                return
             }
 
-            const parent = extractParent(call.headers)
+            const parent = extractParent(headers)
             const span = getTracer().startSpan(
                 operation.name,
-                { kind: SpanKind.SERVER, attributes: commonAttributes(operation, command) },
+                { kind: SpanKind.INTERNAL, attributes: commonAttributes(operation, reported) },
                 parent
             )
             const active = trace.setSpan(parent, span)
-            captureBody(span, settings, command, ATTR_REQUEST_BODY)
+            callContext.items.push(new LiveSpan(span, settings))
+            callContext.items.push({
+                wrap(run) {
+                    return context.with(active, run)
+                },
+            })
+            captureBody(span, settings, reported, ATTR_REQUEST_BODY)
+        },
 
-            return settle(span, settings, () => context.with(active, next))
+        onProcessed(callContext, response) {
+            completeLiveSpans(callContext, response, null)
+        },
+
+        onHandlingError(callContext, error) {
+            completeLiveSpans(callContext, null, error)
         },
     }
 }
 
-/**
- * @param {Span} span
- * @param {ResolvedSettings} settings
- * @param {() => unknown} run
- * @returns {Promise<void> | void}
- */
-function settle(span, settings, run) {
-    /** @type {unknown} */
-    let result
-    try {
-        result = run()
-    } catch (error) {
-        endWithError(span, error)
-        return
+function completeLiveSpans(callContext, response, error) {
+    for (let i = callContext.items.length - 1; i >= 0; i--) {
+        const item = callContext.items[i]
+        if (item instanceof LiveSpan) {
+            item.complete(response, error)
+            callContext.items.splice(i, 1)
+        }
     }
-
-    if (result !== null && typeof result === 'object' && 'then' in result && typeof result.then === 'function') {
-        return Promise.resolve(result).then(
-            (response) => endWithResponse(span, settings, response),
-            (error) => endWithError(span, error)
-        )
-    }
-    endWithResponse(span, settings, result)
 }
 
-/**
- * A Hypertube call that fails on the remote side still completes with an `Exception` response,
- * so the span is marked as failed from that response.
- * @param {Span} span
- * @param {ResolvedSettings} settings
- * @param {unknown} response
- */
 function endWithResponse(span, settings, response) {
     if (isCommand(response)) {
         captureBody(span, settings, response, ATTR_RESPONSE_BODY)
@@ -129,10 +137,6 @@ function endWithResponse(span, settings, response) {
     span.end()
 }
 
-/**
- * @param {Span} span
- * @param {unknown} error
- */
 function endWithError(span, error) {
     const name = error instanceof Error ? error.name : typeof error
     const message = error instanceof Error ? error.message : String(error)
@@ -141,12 +145,6 @@ function endWithError(span, error) {
     span.end()
 }
 
-/**
- * @param {Span} span
- * @param {string} name
- * @param {string} message
- * @param {string} [stack]
- */
 function markFailed(span, name, message, stack) {
     const redacted = String(LogsRedactor.redactValue(message) ?? '')
     span.recordException({ name, message: redacted, stack })
@@ -154,10 +152,6 @@ function markFailed(span, name, message, stack) {
     span.setStatus({ code: SpanStatusCode.ERROR, message: redacted })
 }
 
-/**
- * @param {Context} active
- * @param {Record<string, string>} headers
- */
 function inject(active, headers) {
     propagation.inject(active, headers)
     const spanContext = trace.getSpanContext(active)
@@ -166,12 +160,6 @@ function inject(active, headers) {
     }
 }
 
-/**
- * Uses W3C `traceparent`/`tracestate` when present. Callers that only send a Graftcode `traceid`
- * header still join that trace, under a synthetic remote parent.
- * @param {Readonly<Record<string, string>>} headers
- * @returns {Context}
- */
 function extractParent(headers) {
     const base = context.active()
     const extracted = propagation.extract(base, headers)
@@ -192,18 +180,11 @@ function extractParent(headers) {
     })
 }
 
-/**
- * @param {string | undefined} raw
- * @returns {string | undefined}
- */
 function readTraceId(raw) {
     const hex = raw?.trim().replaceAll('-', '').toLowerCase()
     return hex && /^[0-9a-f]{32}$/.test(hex) && !/^0+$/.test(hex) ? hex : undefined
 }
 
-/**
- * @returns {string}
- */
 function randomSpanId() {
     let spanId
     do {
@@ -212,11 +193,6 @@ function randomSpanId() {
     return spanId
 }
 
-/**
- * A `traceparent` configured on the connection itself is the caller's choice and is not overridden.
- * @param {{ getHeaders(): Record<string, string> }} connectionData
- * @returns {boolean}
- */
 function hasOwnTraceparent(connectionData) {
     try {
         return TRACEPARENT_HEADER in connectionData.getHeaders()
@@ -225,12 +201,6 @@ function hasOwnTraceparent(connectionData) {
     }
 }
 
-/**
- * @param {Span} span
- * @param {ResolvedSettings} settings
- * @param {unknown} command
- * @param {string} attribute
- */
 function captureBody(span, settings, command, attribute) {
     if (!settings.captureBodies || !span.isRecording()) {
         return
@@ -245,67 +215,27 @@ function captureBody(span, settings, command, attribute) {
     }
 }
 
-/**
- * @param {GraftOperation} operation
- * @param {{ runtimeName: number, commandType: number }} command
- * @returns {Attributes}
- */
 function commonAttributes(operation, command) {
-    /** @type {Attributes} */
-    const attributes = {
-        'rpc.system': 'graftcode',
-        'rpc.method': operation.method,
+    return {
         'hypertube.runtime': runtimeNameOf(command.runtimeName),
         'hypertube.command_type': commandTypeName(command.commandType),
+        'hypertube.operation': operation.name,
     }
-    if (operation.service) {
-        attributes['rpc.service'] = operation.service
-    }
-    return attributes
 }
 
-/**
- * @param {GraftOperation} operation
- * @param {{ runtimeName: number, commandType: number }} command
- * @param {{ hostname?: string, connectionType?: number }} connectionData
- * @returns {Attributes}
- */
-function clientAttributes(operation, command, connectionData) {
+function callerAttributes(operation, command, connectionData, target) {
     const attributes = commonAttributes(operation, command)
-    const target = safe(() => LogsRedactor.redactTarget(connectionData.hostname)) ?? ''
     const connectionType = safe(() => connectionData.connectionType)
 
-    attributes['graft.dependency.type'] = 'Graft'
-    attributes['graft.dependency.target'] = target
-    attributes['hypertube.target'] = target
+    attributes[ATTR_DEPENDENCY_TYPE] = DEPENDENCY_TYPE
+    attributes[ATTR_DEPENDENCY_TARGET] = String(LogsRedactor.redactValue(target) ?? '')
+    attributes['hypertube.target'] = safe(() => LogsRedactor.redactTarget(connectionData.hostname)) ?? ''
     if (typeof connectionType === 'number') {
         attributes['hypertube.connection_type'] = connectionTypeName(connectionType)
     }
-
-    const url = safe(() => new URL(target))
-    if (url?.hostname) {
-        attributes['server.address'] = url.hostname
-        const port = Number(url.port || defaultPort(url.protocol))
-        if (port) {
-            attributes['server.port'] = port
-        }
-    }
     return attributes
 }
 
-/**
- * @param {string} protocol
- * @returns {number}
- */
-function defaultPort(protocol) {
-    return protocol === 'wss:' || protocol === 'https:' ? 443 : protocol === 'ws:' || protocol === 'http:' ? 80 : 0
-}
-
-/**
- * @template T
- * @param {() => T} read
- * @returns {T | undefined}
- */
 function safe(read) {
     try {
         return read()

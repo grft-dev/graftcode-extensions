@@ -1,17 +1,10 @@
-import { LogsRedactor, commandTypeName, isCommand, runtimeNameOf } from 'hypertube-nodejs-sdk/observability'
+import { LogsRedactor, commandTypeName, isCommand, runtimeNameOf } from 'hypertube-nodejs-sdk/abstractions'
 
 const TRUNCATION_MARKER = '"__truncated__"'
 const MAX_DEPTH = 24
 const CLOSING_COST_PER_LEVEL = 18
 const SCALAR_RESERVE = 32
 
-/**
- * Renders a command tree as JSON of at most about `maxLength` characters. Strings that look like
- * secrets, values that follow a sensitive key and embedded tokens are redacted.
- * @param {unknown} command
- * @param {number} maxLength
- * @returns {{ body: string, truncated: boolean } | undefined}
- */
 export function renderBody(command, maxLength) {
     if (!isCommand(command)) {
         return undefined
@@ -22,16 +15,6 @@ export function renderBody(command, maxLength) {
     return { body: LogsRedactor.redactBody(writer.out), truncated: writer.truncated }
 }
 
-/**
- * @typedef {{ out: string, max: number, truncated: boolean }} Writer
- */
-
-/**
- * @param {Writer} writer
- * @param {{ runtimeName: number, commandType: number, payload: unknown[] }} command
- * @param {number} depth
- * @returns {boolean} Whether the command was written completely.
- */
 function writeCommand(writer, command, depth) {
     writer.out += `{"runtime":"${runtimeNameOf(command.runtimeName)}","type":"${commandTypeName(command.commandType)}","payload":[`
 
@@ -66,14 +49,6 @@ function writeCommand(writer, command, depth) {
     return complete
 }
 
-/**
- * @param {Writer} writer
- * @param {unknown} value
- * @param {number} depth
- * @param {number} budget
- * @param {boolean} forceRedact
- * @returns {boolean}
- */
 function writeValue(writer, value, depth, budget, forceRedact) {
     if (value === null || value === undefined) {
         writer.out += 'null'
@@ -112,12 +87,6 @@ function writeValue(writer, value, depth, budget, forceRedact) {
     return writeString(writer, LogsRedactor.redactValue(format(value)), budget)
 }
 
-/**
- * @param {Writer} writer
- * @param {string} value
- * @param {number} budget
- * @returns {boolean}
- */
 function writeString(writer, value, budget) {
     const encoded = JSON.stringify(value)
     if (writer.out.length + encoded.length <= budget) {
@@ -131,10 +100,6 @@ function writeString(writer, value, budget) {
     return false
 }
 
-/**
- * @param {unknown} value
- * @returns {string}
- */
 function format(value) {
     try {
         return String(value)
