@@ -51,8 +51,8 @@ ctest --test-dir build -C Release --output-on-failure
 
 Output:
 
-- Windows: `pubsub/build/PubSubPlugin/PubSubPlugin.dll` — config `"name": "PubSubPlugin"`
-- Linux/macOS: `pubsub/build/PubSubPlugin/libPubSubPlugin.so` or `.dylib` — config `"name": "libPubSubPlugin"`
+- Windows: `communication-plugins/pubsub/build/PubSubPlugin/PubSubPlugin.dll` — config `"name": "PubSubPlugin"`
+- Linux/macOS: `communication-plugins/pubsub/build/PubSubPlugin/libPubSubPlugin.so` or `.dylib` — config `"name": "libPubSubPlugin"`
 
 On Windows, copy `PubSubPlugin.dll` next to `gg.exe`. Nothing else from this plugin is required.
 
@@ -62,7 +62,7 @@ Download `gg` from https://github.com/grft-dev/graftcode-gateway/releases/.
 
 ## Emulator
 
-Sample files and compose live in [`samples/pubsub`](../samples/pubsub) (see [samples/README.md](../samples/README.md)). From `pubsub/` you can start the same emulator:
+Sample files and compose live in [`communication-plugin-samples/pubsub`](../../communication-plugin-samples/pubsub) (see [communication-plugin-samples/README.md](../../communication-plugin-samples/README.md)). From `communication-plugins/pubsub/` you can start the same emulator:
 
 ```bash
 docker compose up -d
@@ -71,7 +71,7 @@ docker compose up -d
 The emulator listens on `localhost:8085`. It does not create topics. Sample configs set `autoCreate` to true, so the plugin creates `graft-requests`, `graft-requests-sub`, `graft-replies`, and `graft-replies-sub` in project `graftcode-local` when the gateway and the client start. To create them yourself:
 
 ```bash
-./../samples/pubsub/scripts/create-resources.sh
+../../communication-plugin-samples/pubsub/scripts/create-resources.sh
 ```
 
 `PUBSUB_EMULATOR_HOST` (for example `localhost:8085`) is used when `emulatorHost` is omitted. No credentials are sent to the emulator.
