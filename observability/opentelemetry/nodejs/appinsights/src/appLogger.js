@@ -1,6 +1,6 @@
 import { context } from '@opentelemetry/api'
 import { logs } from '@opentelemetry/api-logs'
-import { LogsLevel, LogsRedactor } from 'hypertube-nodejs-sdk/observability'
+import { LogsLevel, LogsRedactor } from 'hypertube-nodejs-sdk/abstractions'
 
 const SEVERITIES = {
     [LogsLevel.Debug]: [5, 'DEBUG', 'dbug'],
@@ -9,25 +9,9 @@ const SEVERITIES = {
     [LogsLevel.Error]: [17, 'ERROR', 'fail'],
 }
 
-/**
- * @typedef {Record<string, string | number | boolean | undefined>} LogAttributes
- * @typedef {import('./index.js').GraftCodeAppLogger} GraftCodeAppLogger
- */
-
-/**
- * @param {string} serviceName
- * @param {number} minimumLevel
- * @param {boolean} toConsole
- * @returns {GraftCodeAppLogger}
- */
 export function createAppLogger(serviceName, minimumLevel, toConsole) {
     const logger = logs.getLogger(serviceName)
 
-    /**
-     * @param {number} level
-     * @param {string} message
-     * @param {LogAttributes | Error | undefined} details
-     */
     const write = (level, message, details) => {
         if (level < minimumLevel) {
             return
@@ -51,10 +35,6 @@ export function createAppLogger(serviceName, minimumLevel, toConsole) {
     }
 }
 
-/**
- * @param {Error} error
- * @returns {LogAttributes}
- */
 function exceptionAttributes(error) {
     return {
         'exception.type': error.name,

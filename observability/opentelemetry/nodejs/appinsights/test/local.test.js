@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { isSpanContextValid } from '@opentelemetry/api'
-import { HypertubePipeline } from 'hypertube-nodejs-sdk/observability'
+import { HypertubeBroker } from 'hypertube-nodejs-sdk/abstractions'
 import { useGraftCodeAppInsights } from '../src/index.js'
 
 test('without a connection string, traces locally, warns, and still registers Graftcode instrumentation', async () => {
@@ -24,7 +24,7 @@ test('without a connection string, traces locally, warns, and still registers Gr
     assert.ok(written.some((line) => line.startsWith('warn: ConnectorLocalTest: Application Insights telemetry')))
     assert.equal(useGraftCodeAppInsights({ serviceName: 'ConnectorLocalTest' }), telemetry)
     assert.throws(() => useGraftCodeAppInsights({ serviceName: 'Other' }), /already started/)
-    assert.ok(HypertubePipeline.middleware.some((middleware) => middleware.name === 'GraftcodeInstrumentation'))
+    assert.ok(HypertubeBroker.listeners.some((listener) => typeof listener.onExecute === 'function'))
 
     const span = telemetry.tracer.startSpan('work')
     span.end()
@@ -33,5 +33,5 @@ test('without a connection string, traces locally, warns, and still registers Gr
 
     await telemetry.shutdown()
     await telemetry.shutdown()
-    assert.ok(!HypertubePipeline.middleware.some((middleware) => middleware.name === 'GraftcodeInstrumentation'))
+    assert.equal(HypertubeBroker.listeners.length, 0)
 })

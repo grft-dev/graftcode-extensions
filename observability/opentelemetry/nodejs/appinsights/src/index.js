@@ -5,49 +5,11 @@ import { registerInstrumentations } from '@opentelemetry/instrumentation'
 import { resourceFromAttributes } from '@opentelemetry/resources'
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node'
 import { GraftcodeInstrumentation } from 'graftcode-instrumentation'
-import { LogsLevel, parseLogsLevel } from 'hypertube-nodejs-sdk/observability'
+import { LogsLevel, parseLogsLevel } from 'hypertube-nodejs-sdk/abstractions'
 import { createAppLogger } from './appLogger.js'
 
-/**
- * @typedef {Object} GraftCodeAppInsightsOptions
- * @property {string} serviceName - Shown as the cloud role name in Application Insights.
- * @property {string} [connectionString] - Defaults to `APPLICATIONINSIGHTS_CONNECTION_STRING`.
- * @property {number} [tracesPerSecond] - Rate-limit sampling. By default every trace is kept.
- * @property {number} [samplingRatio] - Fixed-ratio sampling between 0 and 1, used when `tracesPerSecond` is not set.
- * @property {'debug' | 'info' | 'warning' | 'error'} [logLevel='info'] - Lowest level exported for application and Graftcode logs.
- * @property {boolean} [console=true] - Also print application logs to standard output.
- * @property {import('graftcode-instrumentation').GraftcodeInstrumentationConfig | false} [graftcode] - Graftcode instrumentation options, or `false` to leave it out.
- * @property {import('@opentelemetry/instrumentation').Instrumentation[]} [instrumentations] - Extra OpenTelemetry instrumentations to register.
- * @property {import('@azure/monitor-opentelemetry').AzureMonitorOpenTelemetryOptions} [azureMonitor] - Advanced Azure Monitor options, applied first.
- */
-
-/**
- * @typedef {Object} GraftCodeAppLogger
- * @property {(message: string, attributes?: Record<string, string | number | boolean | undefined>) => void} debug
- * @property {(message: string, attributes?: Record<string, string | number | boolean | undefined>) => void} info
- * @property {(message: string, attributes?: Record<string, string | number | boolean | undefined>) => void} warn
- * @property {(message: string, errorOrAttributes?: Error | Record<string, string | number | boolean | undefined>) => void} error
- */
-
-/**
- * @typedef {Object} GraftCodeTelemetry
- * @property {string} serviceName
- * @property {boolean} isExporting - Whether telemetry is sent to Application Insights.
- * @property {import('@opentelemetry/api').Tracer} tracer
- * @property {GraftCodeAppLogger} logger
- * @property {() => Promise<void>} flush - Sends buffered telemetry now.
- * @property {() => Promise<void>} shutdown - Flushes and stops telemetry. Safe to call more than once.
- */
-
-/** @type {GraftCodeTelemetry | undefined} */
 let active
 
-/**
- * Starts OpenTelemetry with the Azure Monitor exporters and Graftcode instrumentation. Call it once,
- * as early as possible (for a web server, before the HTTP framework is imported, e.g. via `node --import`).
- * @param {GraftCodeAppInsightsOptions} options
- * @returns {GraftCodeTelemetry}
- */
 export function useGraftCodeAppInsights(options) {
     const serviceName = options?.serviceName?.trim()
     if (!serviceName) {
@@ -75,9 +37,7 @@ export function useGraftCodeAppInsights(options) {
         instrumentations: [...graftcode, ...(options.instrumentations ?? [])],
     })
 
-    /** @type {Promise<void> | undefined} */
     let stopping
-    /** @type {GraftCodeTelemetry} */
     const telemetry = {
         serviceName,
         isExporting: connectionString !== undefined,
@@ -110,12 +70,6 @@ export function useGraftCodeAppInsights(options) {
     return telemetry
 }
 
-/**
- * @param {string} serviceName
- * @param {string} connectionString
- * @param {GraftCodeAppInsightsOptions} options
- * @returns {() => Promise<void>}
- */
 function startAzureMonitor(serviceName, connectionString, options) {
     const advanced = options.azureMonitor ?? {}
     const http = advanced.instrumentationOptions?.http
@@ -140,25 +94,12 @@ function startAzureMonitor(serviceName, connectionString, options) {
     return () => shutdownAzureMonitor()
 }
 
-/**
- * Without a connection string nothing is exported, but spans still get real trace ids so trace
- * context keeps flowing through Graftcode calls.
- * @param {string} serviceName
- * @returns {() => Promise<void>}
- */
 function startLocalTracing(serviceName) {
     const provider = new NodeTracerProvider({ resource: resourceFromAttributes({ 'service.name': serviceName }) })
     provider.register()
     return () => provider.shutdown()
 }
 
-/**
- * A WebSocket handshake opens a long-lived connection shared by many calls. Tracing it as an HTTP
- * request would attach it to whichever call happened to open it, so it is left out; the Graftcode
- * span already describes each call.
- * @param {import('node:http').RequestOptions} request
- * @returns {boolean}
- */
 function isWebSocketUpgrade(request) {
     const headers = request?.headers ?? {}
     return Object.entries(headers).some(
@@ -166,9 +107,6 @@ function isWebSocketUpgrade(request) {
     )
 }
 
-/**
- * @returns {Promise<void>}
- */
 async function forceFlush() {
     await Promise.allSettled([
         delegateOf(trace.getTracerProvider())?.forceFlush?.(),
@@ -176,10 +114,6 @@ async function forceFlush() {
     ])
 }
 
-/**
- * @param {any} provider
- * @returns {any}
- */
 function delegateOf(provider) {
     if (typeof provider?.getDelegate === 'function') {
         return provider.getDelegate()

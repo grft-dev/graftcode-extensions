@@ -1,14 +1,6 @@
-import { CommandType, LogsRedactor, commandTypeName, isCommand } from 'hypertube-nodejs-sdk/observability'
+import { CommandType, LogsRedactor, commandTypeName, isCommand } from 'hypertube-nodejs-sdk/abstractions'
 
 const MAX_DEPTH = 32
-
-/**
- * @typedef {Object} GraftOperation
- * @property {string} name - Span name, `Service/method` or just `method` for global functions.
- * @property {string | undefined} service - The remote type, e.g. `RandomService`.
- * @property {string} method - The remote member, e.g. `fetch`.
- * @property {string} commandType - e.g. `InvokeStaticMethod`.
- */
 
 const MEMBER_COMMANDS = new Set([
     CommandType.InvokeStaticMethod,
@@ -32,20 +24,12 @@ const TYPE_FROM_TARGET_COMMANDS = new Set([
     CommandType.GetInstanceField,
 ])
 
-/**
- * Describes the remote member a command calls. Commands that do not call a member (loading a
- * library, resolving a type, passing values) return `undefined` and are not traced.
- * @param {unknown} command
- * @returns {GraftOperation | undefined}
- */
 export function resolveOperation(command) {
     if (!isCommand(command)) {
         return undefined
     }
 
-    /** @type {string | undefined} */
     let service
-    /** @type {string | undefined} */
     let method
 
     if (MEMBER_COMMANDS.has(command.commandType)) {
@@ -53,7 +37,7 @@ export function resolveOperation(command) {
         method = resolveText(command.payload[1], 0)
     } else if (command.commandType === CommandType.CreateClassInstance) {
         service = resolveTypeName(command.payload[0], 0)
-        method = service ? 'constructor' : undefined
+        method = service ? 'ctor' : undefined
     } else if (
         command.commandType === CommandType.InvokeGlobalFunction ||
         command.commandType === CommandType.GetGlobalField
@@ -68,18 +52,13 @@ export function resolveOperation(command) {
     service = service ? LogsRedactor.redactValue(service) : undefined
     method = LogsRedactor.redactValue(method)
     return {
-        name: service ? `${service}/${method}` : method,
+        name: service ? `${service}.${method}` : method,
         service,
         method,
         commandType: commandTypeName(command.commandType),
     }
 }
 
-/**
- * @param {unknown} item
- * @param {number} depth
- * @returns {string | undefined}
- */
 function resolveText(item, depth) {
     if (depth > MAX_DEPTH) {
         return undefined
@@ -93,11 +72,6 @@ function resolveText(item, depth) {
     return undefined
 }
 
-/**
- * @param {unknown} target
- * @param {number} depth
- * @returns {string | undefined}
- */
 function resolveTypeName(target, depth) {
     if (depth > MAX_DEPTH || target == null) {
         return undefined
