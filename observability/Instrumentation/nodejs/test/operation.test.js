@@ -20,7 +20,7 @@ describe('resolveOperation', () => {
     test('resolves the type through nested commands and Value wrappers', () => {
         const created = command(CommandType.CreateClassInstance, [getType('Calculator')])
         assert.equal(resolveOperation(command(CommandType.InvokeInstanceMethod, [created, value('add')])).name, 'Calculator.add')
-        assert.equal(resolveOperation(created).name, 'Calculator.constructor')
+        assert.equal(resolveOperation(created).name, 'Calculator.ctor')
     })
 
     test('names global functions by the function alone and skips control commands', () => {

@@ -41,7 +41,7 @@ registerInstrumentations({ instrumentations: [new GraftcodeInstrumentation()] })
 
 ## Library catalog
 
-`recordLibraries` remembers libraries loaded on a connection (`LoadLibrary`) so later calls can be attributed. `describeTarget` formats `<library> [version] <channel>`. Version is read from local `package.json` when available. Package folder naming rules apply for `package.json`, `index.js`, `main.js`, etc.
+`LibraryCatalog.record` remembers libraries loaded on a connection (`LoadLibrary`) so later calls can be attributed. `LibraryCatalog.describeTarget` formats `<library> [version] <channel>`. Version is read from local `package.json` when available. Package folder naming rules apply for `package.json`, `index.js`, `main.js`, etc.
 
 ## Body capture
 

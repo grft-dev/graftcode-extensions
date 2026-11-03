@@ -37,7 +37,7 @@ export function resolveOperation(command) {
         method = resolveText(command.payload[1], 0)
     } else if (command.commandType === CommandType.CreateClassInstance) {
         service = resolveTypeName(command.payload[0], 0)
-        method = service ? 'constructor' : undefined
+        method = service ? 'ctor' : undefined
     } else if (
         command.commandType === CommandType.InvokeGlobalFunction ||
         command.commandType === CommandType.GetGlobalField

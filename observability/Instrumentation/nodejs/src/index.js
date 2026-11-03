@@ -1,2 +1,2 @@
-export { GraftcodeInstrumentation } from './GraftcodeInstrumentation.js'
-export { resolveOperation } from './operation.js'
+export { GraftcodeInstrumentation, INSTRUMENTATION_NAME, LOGGER_NAME } from './GraftcodeInstrumentation.js'
+export { resolveOperation } from './resolveOperation.js'

@@ -26,6 +26,9 @@ export interface GraftcodeInstrumentationConfig extends InstrumentationConfig {
     libraries?: LibraryResolver
 }
 
+export declare const INSTRUMENTATION_NAME: 'Graftcode'
+export declare const LOGGER_NAME: 'Hypertube'
+
 export declare class GraftcodeInstrumentation extends InstrumentationBase<GraftcodeInstrumentationConfig> {
     constructor(config?: GraftcodeInstrumentationConfig)
     protected init(): []

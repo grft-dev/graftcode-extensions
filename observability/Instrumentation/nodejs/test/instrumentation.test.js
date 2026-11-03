@@ -170,7 +170,7 @@ describe('GraftcodeInstrumentation', () => {
 
         for (const span of [callerSpan(), calledSpan()]) {
             assert.equal(span.status.code, SpanStatusCode.ERROR)
-            assert.equal(span.attributes['error.type'], 'TypeError')
+            assert.equal(span.attributes['exception.type'], 'TypeError')
             const exception = span.events.find((event) => event.name === 'exception')
             assert.equal(exception.attributes['exception.message'], '[REDACTED]')
         }

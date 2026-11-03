@@ -1,6 +1,7 @@
 import { readFileSync, statSync } from 'node:fs'
 import { basename, dirname, extname, join } from 'node:path'
 import { CommandType, connectionTypeName, isCommand, runtimeNameOf } from 'hypertube-nodejs-sdk/abstractions'
+import { resolveTargetTypeName } from './operationName.js'
 
 const MAX_DEPTH = 32
 const ENTRY_FILE_NAMES = new Set(['index', 'main'])
@@ -8,7 +9,7 @@ const ENTRY_FILE_NAMES = new Set(['index', 'main'])
 const librariesByConnection = new Map()
 const versionByPath = new Map()
 
-export function recordLibraries(command, connectionData) {
+export function record(command, connectionData) {
     for (const load of findCommands(command, CommandType.LoadLibrary, 0)) {
         const path = libraryPath(load)
         const name = path ? libraryNameFromPath(path) : undefined
@@ -26,7 +27,7 @@ export function recordLibraries(command, connectionData) {
     }
 }
 
-export function describeTarget(command, connectionData, operation, configured) {
+export function describeTarget(command, connectionData, configured, operation) {
     const channel = channelName(connectionData)
     const library = resolveLibrary(command, connectionData, operation, configured)
     if (!library) {
@@ -61,7 +62,7 @@ function resolveLibrary(command, connectionData, operation, configured) {
     }
 
     const libraries = librariesByConnection.get(connectionKey(connectionData))
-    const typeName = operation.service
+    const typeName = operation?.service ?? resolveTargetTypeName(command)
     if (!typeName) {
         return undefined
     }
@@ -103,8 +104,8 @@ function configuredName(configured, connectionData, command, operation) {
                       target,
                       channel: channelName(connectionData),
                       runtime: runtimeNameOf(command.runtimeName),
-                      service: operation.service,
-                      method: operation.method,
+                      service: operation?.service ?? resolveTargetTypeName(command),
+                      method: operation?.method,
                   })
                 : (configured[target] ?? configured[target.replace(/\/+$/, '')])
     } catch {
