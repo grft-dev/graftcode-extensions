@@ -1,0 +1,10 @@
+# frozen_string_literal: true
+
+source 'https://rubygems.org'
+
+gem 'graftcode-instrumentation', path: '.'
+gem 'hypertube-ruby-sdk', path: '../../../../HYPERTUBE/src/ruby'
+
+gem 'opentelemetry-api', '~> 1.4'
+gem 'opentelemetry-sdk', '~> 1.8'
+gem 'rspec', '~> 3.13'

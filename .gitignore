@@ -13,4 +13,6 @@ target/
 *.class
 
 node_modules/
+vendor/
+.bundle/
 *.tgz
