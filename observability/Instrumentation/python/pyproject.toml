@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "graftcode-instrumentation"
+version = "1.0.0"
+description = "OpenTelemetry instrumentation for Graftcode / Hypertube calls in Python"
+readme = "README.md"
+authors = [{ name = "Graftcode S.A.", email = "support@graftcode.com" }]
+license = { text = "MIT" }
+requires-python = ">=3.8"
+dependencies = [
+    "opentelemetry-api>=1.20",
+    "hypertube-python-sdk>=3.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "opentelemetry-sdk>=1.20",
+    "graftcode-context>=1.0.3",
+    "pytest",
+]
+
+[tool.setuptools]
+packages = ["graftcode_instrumentation"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".", "tests"]
