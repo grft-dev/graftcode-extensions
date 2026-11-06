@@ -1,0 +1,8 @@
+# frozen_string_literal: true
+
+source 'https://rubygems.org'
+
+gemspec
+
+# Local Hypertube for development — not expressible in the published gemspec (path varies per checkout).
+gem 'hypertube-ruby-sdk', path: '../../../../HYPERTUBE/src/ruby'
