@@ -1,15 +1,19 @@
+from __future__ import annotations
+
+from typing import Any, Dict, List, Optional, Sequence
+
 _NULL_VALUE = "(null)"
 
 
 class MessageTemplate:
 
     @staticmethod
-    def render(template, args, properties):
+    def render(template: Optional[str], args: Optional[Sequence[Any]], properties: Dict[str, str]) -> str:
         if template is None:
             return ""
 
         values = args or ()
-        builder = []
+        builder: List[str] = []
         arg_index = 0
         length = len(template)
         i = 0
@@ -41,7 +45,7 @@ class MessageTemplate:
         return "".join(builder)
 
     @staticmethod
-    def _property_name(placeholder):
+    def _property_name(placeholder: str) -> str:
         end = len(placeholder)
         for index, character in enumerate(placeholder):
             if character in ",:":
@@ -55,7 +59,7 @@ class MessageTemplate:
         return name
 
     @staticmethod
-    def _format(value):
+    def _format(value: Any) -> str:
         if value is None:
             return _NULL_VALUE
 

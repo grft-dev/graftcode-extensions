@@ -1,13 +1,18 @@
+from __future__ import annotations
+
 import random
+from typing import Any, Mapping, Optional
 
 from opentelemetry import context as otel_context
 from opentelemetry import trace
 from opentelemetry.context import Context
 from opentelemetry.propagators.textmap import Getter
-from opentelemetry.trace import NonRecordingSpan, SpanContext, SpanKind, Status, StatusCode, TraceFlags
+from opentelemetry.trace import NonRecordingSpan, Span, SpanContext, SpanKind, Status, StatusCode, TraceFlags, Tracer
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 
+from hypertube.utils.Command import Command
 from hypertube.utils.CommandType import CommandType
+from hypertube.utils.connectionData.IConnectionData import IConnectionData
 from hypertube.utils.logging.LogsRedactor import LogsRedactor
 
 from graftcode_instrumentation.BodyCapture import BodyCapture
@@ -23,7 +28,7 @@ _SKIPPED_COMMANDS = (
 )
 
 
-def _header(headers, key):
+def _header(headers: Mapping[Any, Any], key: str) -> Optional[Any]:
     value = headers.get(key)
     if value is not None:
         return value
@@ -37,11 +42,11 @@ def _header(headers, key):
 
 class _HeaderGetter(Getter):
 
-    def get(self, carrier, key):
+    def get(self, carrier: Any, key: str) -> Optional[list[str]]:
         value = _header(carrier, key)
         return None if value is None else [value]
 
-    def keys(self, carrier):
+    def keys(self, carrier: Any) -> list[Any]:
         return list(carrier.keys())
 
 
@@ -60,15 +65,15 @@ class CallSpan:
     _PROPAGATOR = TraceContextTextMapPropagator()
     _HEADER_GETTER = _HeaderGetter()
 
-    def __init__(self, span):
+    def __init__(self, span: Span) -> None:
         self.span = span
-        self._token = otel_context.attach(trace.set_span_in_context(span))
-        self._injected_into = None
-        self._previous_headers = None
+        self._token: Any = otel_context.attach(trace.set_span_in_context(span))
+        self._injected_into: Optional[IConnectionData] = None
+        self._previous_headers: Optional[Mapping[str, str]] = None
         self._completed = False
 
     @staticmethod
-    def start_invoke(tracer, command, connection_data):
+    def start_invoke(tracer: Tracer, command: Command, connection_data: IConnectionData) -> Optional[CallSpan]:
         operation = CallSpan._resolve_operation(command)
         if operation is None:
             return None
@@ -84,8 +89,11 @@ class CallSpan:
             span.set_attribute(CallSpan.DEPENDENCY_TYPE, CallSpan.BRIDGE_DEPENDENCY_TYPE)
             CallSpan._set_if_present(span, CallSpan.DEPENDENCY_TARGET, LogsRedactor.redact_value(target))
             CallSpan._set_if_present(span, "hypertube.operation", LogsRedactor.redact_value(operation))
-            CallSpan._set_if_present(span, "hypertube.target",
-                                     LogsRedactor.redact_value(LogsRedactor.redact_target(connection_data.hostname)))
+            CallSpan._set_if_present(
+                span,
+                "hypertube.target",
+                LogsRedactor.redact_value(LogsRedactor.redact_target(connection_data.hostname)),
+            )
 
         call_span = CallSpan(span)
         call_span._capture(command, CallSpan.REQUEST_BODY, CallSpan.REQUEST_BODY_TRUNCATED)
@@ -95,7 +103,7 @@ class CallSpan:
         return call_span
 
     @staticmethod
-    def start_handle(tracer, command, headers):
+    def start_handle(tracer: Tracer, command: Command, headers: Mapping[str, str]) -> Optional[CallSpan]:
         operation = CallSpan._resolve_operation(command)
         if operation is None:
             return None
@@ -104,7 +112,7 @@ class CallSpan:
         call_span._capture(command, CallSpan.REQUEST_BODY, CallSpan.REQUEST_BODY_TRUNCATED)
         return call_span
 
-    def complete(self, response, exception):
+    def complete(self, response: Any, exception: Optional[BaseException]) -> None:
         if self._completed:
             return
 
@@ -129,14 +137,14 @@ class CallSpan:
             finally:
                 self.span.end()
 
-    def dispose(self):
+    def dispose(self) -> None:
         self.complete(None, None)
 
-    def close(self):
+    def close(self) -> None:
         self.complete(None, None)
 
     @staticmethod
-    def _resolve_operation(command):
+    def _resolve_operation(command: Command) -> Optional[str]:
         if command.command_type in _SKIPPED_COMMANDS:
             return None
 
@@ -144,7 +152,7 @@ class CallSpan:
         return None if operation.lower().endswith("telemetrysetup.initialize") else operation
 
     @staticmethod
-    def _start(tracer, name, headers):
+    def _start(tracer: Tracer, name: str, headers: Mapping[Any, Any]) -> Span:
         carrier = headers if headers is not None else {}
 
         remote = CallSpan._PROPAGATOR.extract(carrier, context=Context(), getter=CallSpan._HEADER_GETTER)
@@ -164,7 +172,7 @@ class CallSpan:
         return tracer.start_span(name, kind=SpanKind.INTERNAL)
 
     @staticmethod
-    def _read_trace_id(raw):
+    def _read_trace_id(raw: Optional[str]) -> Optional[int]:
         if raw is None:
             return None
 
@@ -178,13 +186,13 @@ class CallSpan:
         return int(hex_value, 16)
 
     @staticmethod
-    def _random_span_id():
+    def _random_span_id() -> int:
         span_id = 0
         while span_id == 0:
             span_id = random.getrandbits(64)
         return span_id
 
-    def _inject_into(self, connection_data):
+    def _inject_into(self, connection_data: IConnectionData) -> None:
         local = connection_data.get_thread_local_headers()
         span_context = self.span.get_span_context()
         if (not span_context.is_valid
@@ -201,7 +209,7 @@ class CallSpan:
         self._injected_into = connection_data
         self._previous_headers = local
 
-    def _capture(self, command, body_key, truncated_key):
+    def _capture(self, command: Any, body_key: str, truncated_key: str) -> None:
         if not self.span.is_recording() or not GraftcodeTelemetrySettings.is_body_capture_enabled():
             return
 
@@ -214,6 +222,6 @@ class CallSpan:
             self.span.set_attribute(truncated_key, True)
 
     @staticmethod
-    def _set_if_present(span, key, value):
+    def _set_if_present(span: Span, key: str, value: Optional[str]) -> None:
         if value is not None:
             span.set_attribute(key, value)

@@ -1,9 +1,13 @@
+from __future__ import annotations
+
 import os
 import threading
 import zipfile
+from typing import Any, Dict, List, Optional
 
 from hypertube.utils.Command import Command
 from hypertube.utils.CommandType import CommandType
+from hypertube.utils.connectionData.IConnectionData import IConnectionData
 
 from graftcode_instrumentation.OperationName import OperationName
 
@@ -11,23 +15,23 @@ from graftcode_instrumentation.OperationName import OperationName
 class _Library:
     __slots__ = ("name", "version")
 
-    def __init__(self, name, version):
+    def __init__(self, name: str, version: str) -> None:
         self.name = name
         self.version = version
 
 
 class LibraryCatalog:
-    _libraries_by_connection = {}
-    _version_by_path = {}
+    _libraries_by_connection: Dict[str, Dict[str, _Library]] = {}
+    _version_by_path: Dict[str, str] = {}
     _lock = threading.Lock()
 
     @staticmethod
-    def record(command, connection_data):
+    def record(command: Command, connection_data: IConnectionData) -> None:
         for load in LibraryCatalog._find_commands(command, CommandType.LoadLibrary):
             LibraryCatalog._record_load(load, connection_data)
 
     @staticmethod
-    def describe_target(command, connection_data):
+    def describe_target(command: Command, connection_data: IConnectionData) -> str:
         channel = LibraryCatalog.channel(connection_data)
         library = LibraryCatalog._resolve_library_name(command, connection_data)
 
@@ -40,11 +44,11 @@ class LibraryCatalog:
         return library + " " + version + " " + channel
 
     @staticmethod
-    def channel(connection_data):
+    def channel(connection_data: IConnectionData) -> str:
         return connection_data.connection_type.name.replace("_", "").lower()
 
     @staticmethod
-    def _record_load(command, connection_data):
+    def _record_load(command: Command, connection_data: IConnectionData) -> None:
         path = LibraryCatalog._resolve_library_path(command)
         if OperationName.is_blank(path):
             return
@@ -64,13 +68,13 @@ class LibraryCatalog:
             libraries[name.lower()] = _Library(name, version)
 
     @staticmethod
-    def _find_commands(command, command_type):
-        matches = []
+    def _find_commands(command: Command, command_type: CommandType) -> List[Command]:
+        matches: List[Command] = []
         LibraryCatalog._collect(command, command_type, matches)
         return matches
 
     @staticmethod
-    def _collect(command, command_type, matches):
+    def _collect(command: Command, command_type: CommandType, matches: List[Command]) -> None:
         if command.command_type == command_type:
             matches.append(command)
 
@@ -79,7 +83,7 @@ class LibraryCatalog:
                 LibraryCatalog._collect(item, command_type, matches)
 
     @staticmethod
-    def _resolve_library_name(command, connection_data):
+    def _resolve_library_name(command: Command, connection_data: IConnectionData) -> Optional[str]:
         for load in LibraryCatalog._find_commands(command, CommandType.LoadLibrary):
             path = LibraryCatalog._resolve_library_path(load)
             name = None if OperationName.is_blank(path) else LibraryCatalog._file_name_without_extension(path)
@@ -94,7 +98,7 @@ class LibraryCatalog:
         if not libraries:
             return LibraryCatalog._root_namespace(type_name)
 
-        best_match = None
+        best_match: Optional[str] = None
         for library in list(libraries.values()):
             if not LibraryCatalog._is_type_of_library(type_name, library.name):
                 continue
@@ -105,18 +109,18 @@ class LibraryCatalog:
         return best_match if best_match is not None else LibraryCatalog._root_namespace(type_name)
 
     @staticmethod
-    def _root_namespace(type_name):
+    def _root_namespace(type_name: str) -> str:
         separator = type_name.find(".")
         return type_name if separator < 0 else type_name[:separator]
 
     @staticmethod
-    def _is_type_of_library(type_name, library_name):
+    def _is_type_of_library(type_name: str, library_name: str) -> bool:
         type_lower = type_name.lower()
         library_lower = library_name.lower()
         return type_lower == library_lower or type_lower.startswith(library_lower + ".")
 
     @staticmethod
-    def _lookup_version(connection_data, library):
+    def _lookup_version(connection_data: IConnectionData, library: str) -> Optional[str]:
         libraries = LibraryCatalog._libraries_by_connection.get(LibraryCatalog._connection_key(connection_data))
         if not libraries:
             return None
@@ -125,11 +129,11 @@ class LibraryCatalog:
         return None if entry is None else entry.version
 
     @staticmethod
-    def _connection_key(connection_data):
+    def _connection_key(connection_data: IConnectionData) -> str:
         return connection_data.connection_type.name + "|" + str(connection_data.hostname)
 
     @staticmethod
-    def _resolve_library_path(command):
+    def _resolve_library_path(command: Command) -> Optional[str]:
         payload = command.payload
         for i in range(len(payload) - 1, -1, -1):
             path = LibraryCatalog._as_text(payload[i])
@@ -139,7 +143,7 @@ class LibraryCatalog:
         return None
 
     @staticmethod
-    def _as_text(payload_item):
+    def _as_text(payload_item: Any) -> Optional[str]:
         if isinstance(payload_item, Command):
             if (payload_item.command_type == CommandType.Value
                     and payload_item.payload
@@ -150,13 +154,13 @@ class LibraryCatalog:
         return payload_item if isinstance(payload_item, str) else None
 
     @staticmethod
-    def _file_name_without_extension(path):
+    def _file_name_without_extension(path: str) -> str:
         name = os.path.basename(path.rstrip("/\\"))
         dot = name.rfind(".")
         return name[:dot] if dot > 0 else name
 
     @staticmethod
-    def _read_version(path, name):
+    def _read_version(path: str, name: str) -> str:
         if path.lower().endswith(".jar") and os.path.isfile(path):
             return LibraryCatalog._read_jar_version(path)
 
@@ -166,14 +170,14 @@ class LibraryCatalog:
         return ""
 
     @staticmethod
-    def _read_jar_version(path):
+    def _read_jar_version(path: str) -> str:
         try:
             with zipfile.ZipFile(path) as jar:
                 manifest = jar.read("META-INF/MANIFEST.MF").decode("utf-8", errors="replace")
         except (OSError, KeyError, zipfile.BadZipFile):
             return ""
 
-        attributes = {}
+        attributes: Dict[str, str] = {}
         for line in manifest.splitlines():
             key, separator, value = line.partition(":")
             if separator:
@@ -183,7 +187,7 @@ class LibraryCatalog:
         return "" if OperationName.is_blank(version) else version.strip()
 
     @staticmethod
-    def _read_distribution_version(name):
+    def _read_distribution_version(name: str) -> str:
         try:
             from importlib import metadata
             return metadata.version(name).strip()

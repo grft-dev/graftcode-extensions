@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import Any, Optional, Type
+
 from hypertube.utils.Command import Command
 from hypertube.utils.CommandType import CommandType
 
@@ -35,7 +39,7 @@ _TYPED_BY_FIRST_PAYLOAD = (
 class OperationName:
 
     @staticmethod
-    def resolve(command):
+    def resolve(command: Command) -> str:
         command_type = command.command_type
 
         if command_type in _MEMBER_COMMANDS:
@@ -55,7 +59,7 @@ class OperationName:
         return OperationName._fallback(command)
 
     @staticmethod
-    def resolve_target_type_name(command):
+    def resolve_target_type_name(command: Command) -> Optional[str]:
         command_type = command.command_type
 
         if command_type in _MEMBER_COMMANDS or command_type == CommandType.CreateClassInstance:
@@ -67,27 +71,27 @@ class OperationName:
         return None
 
     @staticmethod
-    def is_blank(value):
+    def is_blank(value: Any) -> bool:
         return value is None or not str(value).strip()
 
     @staticmethod
-    def _fallback(command):
+    def _fallback(command: Command) -> str:
         return "hypertube." + command.command_type.name
 
     @staticmethod
-    def _qualify(type_name, member_name):
+    def _qualify(type_name: Optional[str], member_name: Optional[str]) -> Optional[str]:
         if OperationName.is_blank(member_name):
             return None
 
         return member_name if OperationName.is_blank(type_name) else type_name + "." + member_name
 
     @staticmethod
-    def _payload_at(command, index):
+    def _payload_at(command: Command, index: int) -> Any:
         payload = command.payload
         return payload[index] if len(payload) > index else None
 
     @staticmethod
-    def _resolve_text(payload_item, depth):
+    def _resolve_text(payload_item: Any, depth: int) -> Optional[str]:
         if depth > _MAX_DEPTH:
             return None
 
@@ -100,7 +104,7 @@ class OperationName:
         return None
 
     @staticmethod
-    def _resolve_type_name_core(target, depth):
+    def _resolve_type_name_core(target: Any, depth: int) -> Optional[str]:
         if depth > _MAX_DEPTH or target is None:
             return None
 
@@ -116,7 +120,7 @@ class OperationName:
         return OperationName._full_name(type(target))
 
     @staticmethod
-    def _resolve_type_name_from_command(command, depth):
+    def _resolve_type_name_from_command(command: Command, depth: int) -> Optional[str]:
         command_type = command.command_type
 
         if command_type == CommandType.Value:
@@ -135,7 +139,7 @@ class OperationName:
         return None
 
     @staticmethod
-    def _full_name(value_type):
+    def _full_name(value_type: Type[Any]) -> str:
         module = value_type.__module__
         if module in (None, "builtins"):
             return value_type.__qualname__

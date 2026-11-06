@@ -1,8 +1,12 @@
+from __future__ import annotations
+
 import atexit
 import logging
 import sys
 import threading
 import traceback
+from types import TracebackType
+from typing import Optional, Tuple, Type
 
 from opentelemetry import context as otel_context
 from opentelemetry._logs import LogRecord, SeverityNumber
@@ -12,7 +16,7 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.trace.sampling import ALWAYS_ON
-from opentelemetry.trace import SpanKind
+from opentelemetry.trace import Context, SpanKind
 
 from hypertube.utils.logging.LogsLevel import LogsLevel
 
@@ -44,11 +48,11 @@ _STANDARD_RECORD_ATTRIBUTES = frozenset(
 
 class _HypertubeLogHandler(logging.Handler):
 
-    def __init__(self, logger_provider):
+    def __init__(self, logger_provider: LoggerProvider) -> None:
         super().__init__(level=0)
         self._logger = logger_provider.get_logger(GraftcodeInstrumentation.LOGGER_NAME)
 
-    def emit(self, record):
+    def emit(self, record: logging.LogRecord) -> None:
         try:
             attributes = {
                 key: value for key, value in record.__dict__.items()
@@ -73,7 +77,7 @@ class _HypertubeLogHandler(logging.Handler):
             self.handleError(record)
 
     @staticmethod
-    def _severity(level):
+    def _severity(level: int) -> SeverityNumber:
         if level >= logging.ERROR:
             return SeverityNumber.ERROR
         if level >= logging.WARNING:
@@ -87,7 +91,11 @@ class _HypertubeLogHandler(logging.Handler):
 
 class GraftCodeAppInsightsConnectorPipeline:
 
-    def __init__(self, options, providers=None):
+    def __init__(
+            self,
+            options: GraftCodeAppInsightsConnectorOptions,
+            providers: Optional[Tuple[TracerProvider, LoggerProvider]] = None,
+    ) -> None:
         options.validate()
 
         self._flush_gate = threading.Lock()
@@ -129,13 +137,18 @@ class GraftCodeAppInsightsConnectorPipeline:
         sys.excepthook = self._on_uncaught_exception
         threading.excepthook = self._on_uncaught_thread_exception
 
-    def is_exporting_to_app_insights(self):
+    def is_exporting_to_app_insights(self) -> bool:
         return self._exporting_to_app_insights
 
-    def start_span(self, name, kind=SpanKind.INTERNAL, context=None):
+    def start_span(
+            self,
+            name: str,
+            kind: SpanKind = SpanKind.INTERNAL,
+            context: Optional[Context] = None,
+    ):
         return self.tracer.start_span(name, context=context, kind=kind)
 
-    def force_flush(self, timeout_millis=_DEFAULT_FLUSH_MILLISECONDS):
+    def force_flush(self, timeout_millis: int = _DEFAULT_FLUSH_MILLISECONDS) -> bool:
         with self._flush_gate:
             if self._closed:
                 return True
@@ -144,7 +157,7 @@ class GraftCodeAppInsightsConnectorPipeline:
             logs = self.logger_provider.force_flush(timeout_millis)
             return bool(traces) and bool(logs)
 
-    def close(self):
+    def close(self) -> None:
         with self._flush_gate:
             if self._closed:
                 return
@@ -169,18 +182,27 @@ class GraftCodeAppInsightsConnectorPipeline:
         self.tracer_provider.shutdown()
         self.logger_provider.shutdown()
 
-    def dispose(self):
+    def dispose(self) -> None:
         self.close()
 
-    def __enter__(self):
+    def __enter__(self) -> GraftCodeAppInsightsConnectorPipeline:
         return self
 
-    def __exit__(self, exc_type, exc, traceback):
+    def __exit__(
+            self,
+            exc_type: Optional[Type[BaseException]],
+            exc: Optional[BaseException],
+            traceback_obj: Optional[TracebackType],
+    ) -> bool:
         self.close()
         return False
 
     @staticmethod
-    def _build_exporting_sdk(service_name, connection_string, traces_per_second):
+    def _build_exporting_sdk(
+            service_name: str,
+            connection_string: str,
+            traces_per_second: Optional[float],
+    ) -> Tuple[TracerProvider, LoggerProvider]:
         from azure.monitor.opentelemetry.exporter import AzureMonitorLogExporter, AzureMonitorTraceExporter
 
         sampler = ALWAYS_ON if traces_per_second is None else RateLimitedSampler(traces_per_second)
@@ -197,20 +219,25 @@ class GraftCodeAppInsightsConnectorPipeline:
         return tracer_provider, logger_provider
 
     @staticmethod
-    def _build_local_sdk(service_name):
+    def _build_local_sdk(service_name: str) -> Tuple[TracerProvider, LoggerProvider]:
         resource = Resource.create({"service.name": service_name})
         return TracerProvider(resource=resource), LoggerProvider(resource=resource)
 
-    def _warn_about_missing_connection_string(self, options):
+    def _warn_about_missing_connection_string(self, options: GraftCodeAppInsightsConnectorOptions) -> None:
         self.logger.log(LogsLevel.Warning, _MISSING_CONNECTION_STRING, self.service_name)
 
         if not options.enable_console_logging:
             sys.stderr.write(_MISSING_CONNECTION_STRING.replace("{ServiceName}", self.service_name) + "\n")
 
-    def _on_uncaught_exception(self, exc_type, exc_value, exc_traceback):
+    def _on_uncaught_exception(
+            self,
+            exc_type: Optional[Type[BaseException]],
+            exc_value: Optional[BaseException],
+            exc_traceback: Optional[TracebackType],
+    ) -> None:
         self.force_flush()
         self._previous_excepthook(exc_type, exc_value, exc_traceback)
 
-    def _on_uncaught_thread_exception(self, args):
+    def _on_uncaught_thread_exception(self, args: threading.ExceptHookArgs) -> None:
         self.force_flush()
         self._previous_thread_excepthook(args)
