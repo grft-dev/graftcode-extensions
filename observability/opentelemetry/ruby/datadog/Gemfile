@@ -1,0 +1,9 @@
+# frozen_string_literal: true
+
+source 'https://rubygems.org'
+
+gemspec
+
+# Local path deps for this monorepo — published gem pulls these from RubyGems instead.
+gem 'graftcode-instrumentation', path: '../../../Instrumentation/ruby'
+gem 'hypertube-ruby-sdk', path: '../../../../../HYPERTUBE/src/ruby'

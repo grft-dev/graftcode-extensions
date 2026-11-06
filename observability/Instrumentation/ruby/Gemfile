@@ -2,9 +2,7 @@
 
 source 'https://rubygems.org'
 
-gem 'graftcode-instrumentation', path: '.'
-gem 'hypertube-ruby-sdk', path: '../../../../HYPERTUBE/src/ruby'
+gemspec
 
-gem 'opentelemetry-api', '~> 1.4'
-gem 'opentelemetry-sdk', '~> 1.8'
-gem 'rspec', '~> 3.13'
+# Local Hypertube for development — not expressible in the published gemspec (path varies per checkout).
+gem 'hypertube-ruby-sdk', path: '../../../../HYPERTUBE/src/ruby'
