@@ -1,4 +1,4 @@
-name: Shared Plugin Release #d
+name: Communication Plugins Release
 
 on:
   push:
@@ -6,23 +6,13 @@ on:
     tags:
       - "v*"
     paths:
-      - "rabbitmq/**"
-      - "servicebus/**"
-      - "kafka/**"
-      - "sqs/**"
-      - "pubsub/**"
-      - "cmake/**"
-      - ".github/workflows/release.yml"
+      - "communication-plugins/**"
+      - ".github/workflows/communication-plugins-release.yml"
   pull_request:
     branches: [ "main" ]
     paths:
-      - "rabbitmq/**"
-      - "servicebus/**"
-      - "kafka/**"
-      - "sqs/**"
-      - "pubsub/**"
-      - "cmake/**"
-      - ".github/workflows/release.yml"
+      - "communication-plugins/**"
+      - ".github/workflows/communication-plugins-release.yml"
   workflow_dispatch:
     inputs:
       release_tag:
@@ -86,8 +76,8 @@ jobs:
 
           case "${{ matrix.plugin }}" in
             servicebus)
-              echo "DIRECTORY=servicebus" >> "$GITHUB_ENV"
-              echo "ARTIFACT_PATH=servicebus/build/ServiceBusPlugin" >> "$GITHUB_ENV"
+              echo "DIRECTORY=communication-plugins/servicebus" >> "$GITHUB_ENV"
+              echo "ARTIFACT_PATH=communication-plugins/servicebus/build/ServiceBusPlugin" >> "$GITHUB_ENV"
               echo "CONFIGURE_ARGS=-DCMAKE_TOOLCHAIN_FILE=${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake" >> "$GITHUB_ENV"
               if [ "${{ runner.os }}" = "Linux" ]; then
                 echo "INSTALL_PACKAGES=build-essential cmake git ninja-build pkg-config patchelf" >> "$GITHUB_ENV"
@@ -98,8 +88,8 @@ jobs:
               fi
               ;;
             sqs)
-              echo "DIRECTORY=sqs" >> "$GITHUB_ENV"
-              echo "ARTIFACT_PATH=sqs/build/SqsPlugin" >> "$GITHUB_ENV"
+              echo "DIRECTORY=communication-plugins/sqs" >> "$GITHUB_ENV"
+              echo "ARTIFACT_PATH=communication-plugins/sqs/build/SqsPlugin" >> "$GITHUB_ENV"
               echo "CONFIGURE_ARGS=-DCMAKE_TOOLCHAIN_FILE=${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake" >> "$GITHUB_ENV"
               if [ "${{ runner.os }}" = "Linux" ]; then
                 echo "INSTALL_PACKAGES=build-essential cmake git ninja-build pkg-config patchelf" >> "$GITHUB_ENV"
@@ -110,8 +100,8 @@ jobs:
               fi
               ;;
             pubsub)
-              echo "DIRECTORY=pubsub" >> "$GITHUB_ENV"
-              echo "ARTIFACT_PATH=pubsub/build/PubSubPlugin" >> "$GITHUB_ENV"
+              echo "DIRECTORY=communication-plugins/pubsub" >> "$GITHUB_ENV"
+              echo "ARTIFACT_PATH=communication-plugins/pubsub/build/PubSubPlugin" >> "$GITHUB_ENV"
               echo "CONFIGURE_ARGS=-DCMAKE_TOOLCHAIN_FILE=${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake" >> "$GITHUB_ENV"
               if [ "${{ runner.os }}" = "Linux" ]; then
                 echo "INSTALL_PACKAGES=build-essential cmake git ninja-build pkg-config patchelf" >> "$GITHUB_ENV"
@@ -122,8 +112,8 @@ jobs:
               fi
               ;;
             kafka)
-              echo "DIRECTORY=kafka" >> "$GITHUB_ENV"
-              echo "ARTIFACT_PATH=kafka/build/KafkaPlugin" >> "$GITHUB_ENV"
+              echo "DIRECTORY=communication-plugins/kafka" >> "$GITHUB_ENV"
+              echo "ARTIFACT_PATH=communication-plugins/kafka/build/KafkaPlugin" >> "$GITHUB_ENV"
               if [ "${{ runner.os }}" = "Linux" ]; then
                 echo "CONFIGURE_ARGS=" >> "$GITHUB_ENV"
                 echo "INSTALL_PACKAGES=build-essential cmake git libssl-dev libsasl2-dev patchelf" >> "$GITHUB_ENV"
@@ -137,8 +127,8 @@ jobs:
               fi
               ;;
             *)
-              echo "DIRECTORY=rabbitmq" >> "$GITHUB_ENV"
-              echo "ARTIFACT_PATH=rabbitmq/build/RabbitmqPlugin" >> "$GITHUB_ENV"
+              echo "DIRECTORY=communication-plugins/rabbitmq" >> "$GITHUB_ENV"
+              echo "ARTIFACT_PATH=communication-plugins/rabbitmq/build/RabbitmqPlugin" >> "$GITHUB_ENV"
               echo "CONFIGURE_ARGS=" >> "$GITHUB_ENV"
               if [ "${{ runner.os }}" = "Linux" ]; then
                 echo "INSTALL_PACKAGES=build-essential cmake git patchelf" >> "$GITHUB_ENV"
