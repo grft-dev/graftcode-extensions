@@ -17,7 +17,7 @@ Gem::Specification.new do |spec|
   end
   spec.require_paths = ['lib']
 
-  spec.add_runtime_dependency 'opentelemetry-api', '~> 1.4'
+  spec.add_runtime_dependency 'opentelemetry-api', '~> 1.11'
 
   spec.add_development_dependency 'graftcode-context', '~> 1.0'
   spec.add_development_dependency 'hypertube-ruby-sdk', '>= 0.0.1'
