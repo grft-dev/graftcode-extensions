@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require 'hypertube-ruby-sdk/abstractions'
-require 'hypertube-ruby-sdk/utils/connection_type'
-require 'hypertube-ruby-sdk/utils/runtime_name_handler'
+require_relative 'hypertube_sdk'
 require_relative 'operation_name'
 
 module Graftcode
@@ -14,6 +12,7 @@ module Graftcode
       @version_mutex = Mutex.new
 
       Library = Struct.new(:name, :version, keyword_init: true)
+      NAMESPACE_SEPARATOR = /\.|::/
 
       module_function
 
@@ -116,14 +115,14 @@ module Graftcode
       end
 
       def root_namespace(type_name)
-        separator = type_name.index('.')
+        separator = type_name.index(NAMESPACE_SEPARATOR)
         separator.nil? ? type_name : type_name[0...separator]
       end
 
       def type_of_library?(type_name, library_name)
         type = type_name.downcase
         library = library_name.downcase
-        type == library || type.start_with?("#{library}.")
+        type == library || type.start_with?("#{library}.", "#{library}::")
       end
 
       def lookup_version(connection_data, library)

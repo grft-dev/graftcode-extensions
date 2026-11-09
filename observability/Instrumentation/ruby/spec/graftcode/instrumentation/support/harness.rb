@@ -2,29 +2,41 @@
 
 require 'opentelemetry/sdk'
 require 'opentelemetry/sdk/trace/export'
+require 'opentelemetry-logs-sdk'
 
 module Graftcode
   module Instrumentation
     module Support
       class Harness
-        attr_reader :listener, :exporter
+        attr_reader :listener, :tracer_provider, :logger_provider
 
         def initialize(recording: true, minimum_log_level: nil)
-          @exporter = OpenTelemetry::SDK::Trace::Export::InMemorySpanExporter.new(recording: recording)
-          OpenTelemetry::SDK.configure do |c|
-            c.add_span_processor(
-              OpenTelemetry::SDK::Trace::Export::SimpleSpanProcessor.new(@exporter)
-            )
-          end
+          @spans = OpenTelemetry::SDK::Trace::Export::InMemorySpanExporter.new
+          @tracer_provider = OpenTelemetry::SDK::Trace::TracerProvider.new(
+            sampler: recording ? OpenTelemetry::SDK::Trace::Samplers::ALWAYS_ON : OpenTelemetry::SDK::Trace::Samplers::ALWAYS_OFF
+          )
+          @tracer_provider.add_span_processor(OpenTelemetry::SDK::Trace::Export::SimpleSpanProcessor.new(@spans))
+
+          @logs = OpenTelemetry::SDK::Logs::Export::InMemoryLogRecordExporter.new
+          @logger_provider = OpenTelemetry::SDK::Logs::LoggerProvider.new
+          @logger_provider.add_log_record_processor(OpenTelemetry::SDK::Logs::Export::SimpleLogRecordProcessor.new(@logs))
 
           @saved_auto_inject = TelemetrySettings.auto_inject_enabled?
           @saved_capture = TelemetrySettings.body_capture_enabled?
           @saved_max = TelemetrySettings.body_max_characters
 
           @listener = GraftcodeInstrumentation.attach(
-            OpenTelemetry.tracer_provider,
-            minimum_log_level: minimum_log_level
+            @tracer_provider,
+            minimum_log_level: minimum_log_level,
+            logger_provider: @logger_provider
           )
+        end
+
+        def self.open(**options)
+          harness = new(**options)
+          yield harness
+        ensure
+          harness&.close
         end
 
         def on_invoke(command, connection_data)
@@ -59,15 +71,21 @@ module Graftcode
         end
 
         def finished_spans
-          exporter.finished_spans
+          @spans.finished_spans
+        end
+
+        def logs
+          @logs.emitted_log_records
         end
 
         def close
           listener.close
-          OpenTelemetry.tracer_provider.shutdown
+          @tracer_provider.shutdown
+          @logger_provider.shutdown
           TelemetrySettings.auto_inject_enabled = @saved_auto_inject
           TelemetrySettings.body_capture_enabled = @saved_capture
           TelemetrySettings.body_max_characters = @saved_max
+          Hypertube::Utils::InMemoryConnectionData.new.set_thread_local_headers({})
         end
 
         module Commands

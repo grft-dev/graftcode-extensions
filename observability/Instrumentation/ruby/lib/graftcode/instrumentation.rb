@@ -10,8 +10,12 @@ require_relative 'instrumentation/graftcode_instrumentation'
 
 module Graftcode
   module Instrumentation
-    def self.attach(tracer_provider, minimum_log_level: nil)
-      GraftcodeInstrumentation.attach(tracer_provider, minimum_log_level: minimum_log_level)
+    def self.attach(tracer_provider, minimum_log_level: nil, logger_provider: nil)
+      GraftcodeInstrumentation.attach(
+        tracer_provider,
+        minimum_log_level: minimum_log_level,
+        logger_provider: logger_provider
+      )
     end
   end
 end

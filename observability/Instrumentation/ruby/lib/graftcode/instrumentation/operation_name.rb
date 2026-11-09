@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'hypertube-ruby-sdk/abstractions'
+require_relative 'hypertube_sdk'
 
 module Graftcode
   module Instrumentation

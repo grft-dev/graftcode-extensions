@@ -6,17 +6,28 @@ Hypertube exposes a **broker** (`Hypertube::Utils::Abstractions::HypertubeBroker
 
 ## Requirements
 
-- [`hypertube-ruby-sdk`](../../../../HYPERTUBE/src/ruby) with broker abstractions (Hypertube 3.1.18+)
+- [`hypertube-ruby-sdk`](https://rubygems.org/gems/hypertube-ruby-sdk) from rubygems.org, in a release with the broker abstractions (3.1.19 and earlier do not have them yet)
 - `opentelemetry-api` at runtime; configure a tracer provider with `opentelemetry-sdk` (or another exporter pipeline)
 
-## Development
+In a library hosted by Graftcode Gateway, the Hypertube SDK is loaded from the gateway's `Binaries/Ruby` folder rather than as a gem. The instrumentation then reuses that loaded copy instead of requiring `hypertube-ruby-sdk`, so the broker and logger it attaches to are the ones handling calls.
 
-From this directory (use a local bundle path so Hypertube’s `.bundle/config` does not override it):
+## Development
 
 ```bash
 bundle install
 bundle exec rspec
 ```
+
+`hypertube-ruby-sdk` comes from rubygems.org. To test against an unreleased Hypertube build, publish it to the local gem repository and point `HYPERTUBE_GEM_SOURCE` at it:
+
+```powershell
+C:\dev\graft-packages\build-ruby.ps1
+C:\dev\graft-packages\serve-ruby.ps1   # keep running; Bundler uses the compact index only over HTTP
+$env:HYPERTUBE_GEM_SOURCE = "http://127.0.0.1:8808"
+bundle install
+```
+
+The local build is stamped 3.1.18, the version generated grafts pin, which rubygems.org also has. Bundler reuses an installed gem of the same version from any source, so run `gem uninstall hypertube-ruby-sdk -v 3.1.18` before going back to rubygems.org.
 
 ## Usage
 
@@ -32,13 +43,16 @@ end
 
 listener = Graftcode::Instrumentation.attach(
   OpenTelemetry.tracer_provider,
-  minimum_log_level: Hypertube::Utils::Logging::LogsLevel::INFO
+  minimum_log_level: Hypertube::Utils::Logging::LogsLevel::INFO,
+  logger_provider: logger_provider # optional
 )
 
 # ... Hypertube calls ...
 
 listener.close
 ```
+
+With a `logger_provider` (for example from `opentelemetry-logs-sdk`) and a `minimum_log_level`, Hypertube logs are exported as OpenTelemetry log records under the `Hypertube` scope, correlated with the current span. Without one, they are recorded as events on the current span.
 
 ## Configuration (environment)
 
@@ -52,8 +66,8 @@ listener.close
 
 - **Caller:** `Graft <library> [version] <channel>` (or `<Runtime> <channel>`), attributes `graft.dependency.type` = `Graft`, `graft.dependency.target`, plus Hypertube metadata.
 - **Callee:** `Service.method` (or global `method`), kind internal.
-- Remote `Exception` command responses mark the span failed (not only raised errors).
+- A call that raises marks the span failed with `exception.type` and a redacted `exception.message`. A remote `Exception` response completes the span with status OK, as in .NET and Java.
 
 ## Trace context
 
-Outgoing calls inject W3C `traceparent` / `tracestate` and `traceid` via thread-local connection headers when auto-inject is enabled. Incoming handling prefers W3C headers; `traceid` alone joins an existing trace with a synthetic remote parent.
+Outgoing calls inject W3C `traceparent` / `tracestate` and `traceid` via thread-local connection headers when auto-inject is enabled. Only the W3C trace context is used, whatever `OpenTelemetry.propagation` is configured to, so no `baggage` header is sent. Incoming handling prefers W3C headers (matched case-insensitively); `traceid` alone joins an existing trace with a synthetic remote parent.

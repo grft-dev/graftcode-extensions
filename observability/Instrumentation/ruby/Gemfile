@@ -3,8 +3,13 @@
 source 'https://rubygems.org'
 
 gem 'graftcode-instrumentation', path: '.'
-gem 'hypertube-ruby-sdk', path: '../../../../HYPERTUBE/src/ruby'
 
+source ENV.fetch('HYPERTUBE_GEM_SOURCE', 'https://rubygems.org') do
+  gem 'hypertube-ruby-sdk'
+end
+
+gem 'graftcode-context', '~> 1.0'
 gem 'opentelemetry-api', '~> 1.4'
+gem 'opentelemetry-logs-sdk', '~> 0.4'
 gem 'opentelemetry-sdk', '~> 1.8'
 gem 'rspec', '~> 3.13'

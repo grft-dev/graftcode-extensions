@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require 'opentelemetry-api'
-require 'hypertube-ruby-sdk/abstractions'
+require_relative 'hypertube_sdk'
 require_relative 'call_span'
 
 module Graftcode
@@ -14,15 +14,28 @@ module Graftcode
       INSTRUMENTATION_NAME = 'Graftcode'
       LOGGER_NAME = 'Hypertube'
 
-      def self.attach(tracer_provider, minimum_log_level: nil)
-        new(tracer_provider, minimum_log_level)
+      SEVERITY_NUMBER = {
+        Hypertube::Utils::Logging::LogsLevel::TRACE => 1,
+        Hypertube::Utils::Logging::LogsLevel::DEBUG => 5,
+        Hypertube::Utils::Logging::LogsLevel::INFO => 9,
+        Hypertube::Utils::Logging::LogsLevel::WARNING => 13,
+        Hypertube::Utils::Logging::LogsLevel::ERROR => 17
+      }.freeze
+
+      def self.attach(tracer_provider, minimum_log_level: nil, logger_provider: nil)
+        new(tracer_provider, minimum_log_level, logger_provider)
       end
 
-      def initialize(tracer_provider, minimum_log_level = nil)
+      def initialize(tracer_provider, minimum_log_level = nil, logger_provider = nil)
         raise ArgumentError, 'tracer_provider' if tracer_provider.nil?
 
         @tracer = tracer_provider.tracer(INSTRUMENTATION_NAME, VERSION)
         @minimum_log_level = minimum_log_level
+        @logger = if minimum_log_level.nil? || logger_provider.nil?
+                    nil
+                  else
+                    logger_provider.logger(name: LOGGER_NAME, version: VERSION)
+                  end
 
         Hypertube::Utils::Abstractions::HypertubeBroker.attach(self)
         Hypertube::Utils::Logging::HypertubeLogger.attach(self)
@@ -71,7 +84,11 @@ module Graftcode
       def on_log(level, message, properties, exception)
         return unless log_enabled?(level)
 
-        record_span_event(level, message, properties, exception)
+        if @logger.nil?
+          record_span_event(level, message, properties, exception)
+        else
+          emit_log_record(level, message, properties, exception)
+        end
       end
 
       def log_enabled?(level)
@@ -88,11 +105,37 @@ module Graftcode
         OpenTelemetry::Trace.current_span
       end
 
+      def emit_log_record(level, message, properties, exception)
+        attributes = properties.to_h.dup
+        unless exception.nil?
+          attributes['exception.type'] = exception.class.name
+          set_if_present(attributes, 'exception.message', Hypertube::Utils::Logging::LogsRedactor.redact_value(exception.message))
+          set_if_present(attributes, 'exception.stacktrace', Hypertube::Utils::Logging::LogsRedactor.redact_value(stack_trace(exception)))
+        end
+
+        @logger.on_emit(
+          timestamp: Time.now,
+          severity_number: SEVERITY_NUMBER.fetch(level, 0),
+          severity_text: severity_text(level),
+          body: message,
+          attributes: attributes,
+          context: OpenTelemetry::Context.current
+        )
+      end
+
+      def severity_text(level)
+        level == Hypertube::Utils::Logging::LogsLevel::INFO ? 'Information' : Hypertube::Utils::Logging::LogsLevel.name_for(level)
+      end
+
+      def stack_trace(exception)
+        exception.full_message(highlight: false, order: :top)
+      end
+
       def record_span_event(level, message, properties, exception)
         span = current_span
         return unless span.recording?
 
-        attributes = { 'log.level' => Hypertube::Utils::Logging::LogsLevel.name_for(level) }
+        attributes = { 'log.level' => severity_text(level) }
         properties.each { |key, value| attributes[key] = value }
 
         if exception.nil?
@@ -103,7 +146,7 @@ module Graftcode
         attributes['log.message'] = message
         attributes['exception.type'] = exception.class.name
         set_if_present(attributes, 'exception.message', Hypertube::Utils::Logging::LogsRedactor.redact_value(exception.message))
-        set_if_present(attributes, 'exception.stacktrace', Hypertube::Utils::Logging::LogsRedactor.redact_value(exception.full_message))
+        set_if_present(attributes, 'exception.stacktrace', Hypertube::Utils::Logging::LogsRedactor.redact_value(stack_trace(exception)))
         span.add_event('exception', attributes: attributes)
       end
 

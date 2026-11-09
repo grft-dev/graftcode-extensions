@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'hypertube-ruby-sdk/abstractions'
+require_relative 'hypertube_sdk'
 
 module Graftcode
   module Instrumentation
@@ -64,6 +64,11 @@ module Graftcode
       end
 
       def write_value(writer, value, depth, budget, local_budget, force_redact, mark_truncated)
+        if value.nil?
+          writer << 'null'
+          return true
+        end
+
         if depth >= MAX_DEPTH
           mark_truncated.call
           writer << TRUNCATION_MARKER
@@ -72,6 +77,11 @@ module Graftcode
 
         if value.is_a?(Hypertube::Utils::Command)
           return write_command(writer, value, depth, budget, mark_truncated)
+        end
+
+        if value.is_a?(String) && value.encoding == Encoding::BINARY
+          writer << %("[bytes:#{value.bytesize}]")
+          return true
         end
 
         if value.is_a?(String)

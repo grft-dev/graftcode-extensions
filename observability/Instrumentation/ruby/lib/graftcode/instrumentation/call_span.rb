@@ -1,9 +1,7 @@
 # frozen_string_literal: true
 
-require 'securerandom'
 require 'opentelemetry-api'
-require 'hypertube-ruby-sdk/abstractions'
-require 'hypertube-ruby-sdk/utils/runtime_name_handler'
+require_relative 'hypertube_sdk'
 require_relative 'body_capture'
 require_relative 'library_catalog'
 require_relative 'operation_name'
@@ -29,6 +27,20 @@ module Graftcode
         Hypertube::Utils::CommandType::VALUE_FOR_UPDATE,
         Hypertube::Utils::CommandType::INVOKE_DELEGATE
       ].freeze
+
+      TRACE_CONTEXT = OpenTelemetry::Trace::Propagation::TraceContext.text_map_propagator
+
+      module HeaderGetter
+        module_function
+
+        def get(carrier, key)
+          CallSpan.header(carrier, key)
+        end
+
+        def keys(carrier)
+          carrier.keys
+        end
+      end
 
       attr_reader :span
 
@@ -87,19 +99,12 @@ module Graftcode
           capture(response, RESPONSE_BODY, RESPONSE_BODY_TRUNCATED) unless response.nil?
 
           if exception.nil?
-            if exception_response?(response)
-              name = response.payload[2].is_a?(String) ? response.payload[2] : 'Exception'
-              message = response.payload[3].is_a?(String) ? response.payload[3] : ''
-              mark_failed(name, message)
-            else
-              @span.status = OpenTelemetry::Trace::Status.ok
-            end
+            @span.status = OpenTelemetry::Trace::Status.ok
           else
             message = Hypertube::Utils::Logging::LogsRedactor.redact_value(exception.message)
             @span.set_attribute('exception.type', exception.class.name)
             set_if_present(@span, 'exception.message', message)
             @span.status = OpenTelemetry::Trace::Status.error(message.to_s)
-            @span.record_exception(exception) if @span.recording?
           end
 
           if @injected_into
@@ -156,22 +161,23 @@ module Graftcode
 
       def self.extract_parent_context(headers)
         carrier = headers || {}
-        extracted = OpenTelemetry.propagation.extract(carrier, context: OpenTelemetry::Context.current)
-        extracted_span = OpenTelemetry::Trace.current_span(extracted)
-        return extracted if extracted_span.context.valid?
+        extracted = TRACE_CONTEXT.extract(carrier, context: OpenTelemetry::Context.empty, getter: HeaderGetter)
+        return extracted if OpenTelemetry::Trace.current_span(extracted).context.valid?
 
         trace_id = read_trace_id(header(carrier, TRACE_ID_HEADER))
         current_trace_id = OpenTelemetry::Trace.current_span.context.hex_trace_id
         return OpenTelemetry::Context.current if trace_id.nil? || trace_id == current_trace_id
 
         remote_context = OpenTelemetry::Trace::SpanContext.new(
-          trace_id: trace_id,
-          span_id: random_span_id,
+          trace_id: [trace_id].pack('H*'),
+          span_id: OpenTelemetry::Trace.generate_span_id,
           trace_flags: OpenTelemetry::Trace::TraceFlags::SAMPLED,
-          tracestate: OpenTelemetry::Trace::Tracestate.new,
           remote: true
         )
-        OpenTelemetry::Trace.context_with_span(OpenTelemetry::Trace.non_recording_span(remote_context))
+        OpenTelemetry::Trace.context_with_span(
+          OpenTelemetry::Trace.non_recording_span(remote_context),
+          parent_context: OpenTelemetry::Context.empty
+        )
       end
 
       def inject_into(connection_data)
@@ -186,27 +192,15 @@ module Graftcode
 
         headers = local.dup
         headers.delete(TRACE_STATE_HEADER)
-        OpenTelemetry.propagation.inject(
+        TRACE_CONTEXT.inject(
           headers,
-          context: OpenTelemetry::Trace.context_with_span(@span)
+          context: OpenTelemetry::Trace.context_with_span(@span, parent_context: OpenTelemetry::Context.empty)
         )
         headers[TRACE_ID_HEADER] = span_context.hex_trace_id
 
         connection_data.set_thread_local_headers(headers)
         @injected_into = connection_data
         @previous_headers = local
-      end
-
-      def mark_failed(name, message)
-        redacted = Hypertube::Utils::Logging::LogsRedactor.redact_value(message).to_s
-        @span.set_attribute('exception.type', name)
-        set_if_present(@span, 'exception.message', redacted)
-        @span.status = OpenTelemetry::Trace::Status.error(redacted)
-      end
-
-      def exception_response?(response)
-        response.is_a?(Hypertube::Utils::Command) &&
-          response.command_type == Hypertube::Utils::CommandType::EXCEPTION
       end
 
       def self.header(headers, key)
@@ -228,15 +222,12 @@ module Graftcode
         hex
       end
 
-      def self.random_span_id
-        loop do
-          span_id = SecureRandom.hex(8)
-          return span_id unless span_id.match?(/\A0+\z/)
-        end
-      end
-
       def self.set_if_present(span, key, value)
         span.set_attribute(key, value) unless value.nil?
+      end
+
+      def set_if_present(span, key, value)
+        self.class.set_if_present(span, key, value)
       end
     end
   end
