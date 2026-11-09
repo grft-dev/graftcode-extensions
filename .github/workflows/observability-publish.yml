@@ -61,6 +61,9 @@ jobs:
       )
     runs-on: ubuntu-latest
     environment: packages
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v5
 
@@ -85,10 +88,16 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      - name: Authenticate to NuGet with Trusted Publishing
+        id: nuget-login
+        uses: NuGet/login@v1
+        with:
+          user: dskowron
+
       - name: Pack and publish NuGet packages
         shell: bash
         env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
           VERSION: ${{ steps.version.outputs.value }}
         run: |
           set -euo pipefail
