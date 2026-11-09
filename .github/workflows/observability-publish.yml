@@ -39,6 +39,14 @@ jobs:
           distribution: temurin
           java-version: "21"
 
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
       - name: Test .NET instrumentation
         run: dotnet test observability/Instrumentation/dotnet/tests/Graftcode.Instrumentation.Tests/Graftcode.Instrumentation.Tests.csproj --configuration Release
 
@@ -50,6 +58,22 @@ jobs:
 
       - name: Test Java AppInsights connector
         run: mvn --batch-mode --file observability/opentelemetry/java/appinsights/pom.xml verify
+
+      - name: Test Python packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install -e 'observability/Instrumentation/python[dev]'
+          python -m pip install -e 'observability/opentelemetry/python/appinsights[dev]'
+          python -m pytest observability/Instrumentation/python/tests observability/opentelemetry/python/appinsights/tests
+
+      - name: Check Node.js package archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd observability/Instrumentation/nodejs && npm pack --dry-run --json)
+          (cd observability/opentelemetry/nodejs/appinsights && npm pack --dry-run --json)
 
   publish:
     name: Publish observability packages
@@ -135,3 +159,63 @@ jobs:
           mvn --batch-mode --file observability/opentelemetry/java/appinsights/pom.xml \
             --activate-profiles publish --define revision="${VERSION}" \
             --define graftcode.instrumentation.version="${VERSION}" deploy
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Build Python packages
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade build tomlkit
+          mkdir -p artifacts/pypi
+          for package in \
+            observability/Instrumentation/python \
+            observability/opentelemetry/python/appinsights; do
+            PACKAGE_DIR="${package}" python - <<'PY'
+          import os
+          from pathlib import Path
+          import tomlkit
+
+          project_file = Path(os.environ["PACKAGE_DIR"]) / "pyproject.toml"
+          project = tomlkit.parse(project_file.read_text())
+          project["project"]["version"] = os.environ["VERSION"]
+          project_file.write_text(tomlkit.dumps(project))
+          PY
+            python -m build --outdir artifacts/pypi "${package}"
+          done
+
+      - name: Publish Python packages to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PIP_PUBLISH_TOKEN }}
+          packages-dir: artifacts/pypi/
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: https://registry.npmjs.org
+
+      - name: Set npm package versions
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          set -euo pipefail
+          for package in \
+            observability/Instrumentation/nodejs \
+            observability/opentelemetry/nodejs/appinsights; do
+            (cd "${package}" && npm version "${VERSION}" --no-git-tag-version --ignore-scripts)
+          done
+
+      - name: Publish npm packages
+        shell: bash
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          (cd observability/Instrumentation/nodejs && npm publish --access public)
+          (cd observability/opentelemetry/nodejs/appinsights && npm publish --access public)

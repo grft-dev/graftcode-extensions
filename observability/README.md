@@ -1,8 +1,7 @@
 # Observability packages
 
 This directory contains OpenTelemetry instrumentation and Application Insights
-connectors for .NET and Java. Node.js packages are not included in this release
-workflow yet.
+connectors for .NET, Java, Python, and Node.js.
 
 ## Published packages
 
@@ -10,25 +9,30 @@ workflow yet.
 |---|---|---|
 | .NET | `Graftcode.Instrumentation` | `GraftCode.Netcore.Telemetry.AppInsightsConnector` |
 | Java | `com.graftcode:graftcode-instrumentation` | `com.graftcode:graftcode-appinsights-connector` |
+| Python | `graftcode-instrumentation` | `graftcode-telemetry-appinsights` |
+| Node.js | `graftcode-instrumentation` | `graftcode-appinsights-connector` |
 
-The release workflow publishes all four packages at the same version. Push a tag
-named `observability-vX.Y.Z`, or run **Observability Packages** manually and
+The release workflow publishes all eight packages at the same version. Push a
+tag named `observability-vX.Y.Z`, or run **Observability Packages** manually and
 provide the package version. Pull requests and pushes to `main` only build and
 test; they never publish.
 
 ## GitHub setup
 
-Create a GitHub Actions Environment named `packages` and add these secrets:
+Create a GitHub Actions Environment named `packages` and configure:
 
-- `NUGET_API_KEY`: an API key with push access on nuget.org.
+- `NPM_TOKEN`: an npm automation token with publish access to both public packages.
+- `PIP_PUBLISH_TOKEN`: a PyPI API token with upload access to both Python projects.
 - `MAVEN_CENTRAL_USERNAME` and `MAVEN_CENTRAL_PASSWORD`: a Sonatype Central
   Portal user token.
 - `MAVEN_GPG_PRIVATE_KEY` and `MAVEN_GPG_PASSPHRASE`: the signing key and its
   passphrase. The public key must be published to a key server.
+- NuGet Trusted Publishing is used for the .NET packages; configure the
+  `packages` environment as a trusted publisher for the NuGet account.
 
 The Maven Central publisher must have deployment rights for the existing
-`com.graftcode` namespace. NuGet package IDs are reserved when their first
-package is pushed.
+`com.graftcode` namespace. Package names must be created/reserved on PyPI,
+npmjs.com, and NuGet.org before the first release.
 
 ## Upstream SDK requirement
 
