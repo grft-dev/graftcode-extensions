@@ -33,7 +33,8 @@ RSpec.describe Graftcode::Instrumentation::GraftcodeInstrumentation do
     harness_class.open do |harness|
       call_span = harness.on_handle(fetch)
       expect(harness.listener.log_enabled?(levels::INFO)).to be(true)
-      harness.listener.on_log(levels::INFO, 'Hypertube handling INVOKE_STATIC_METHOD', { 'CommandType' => 'INVOKE_STATIC_METHOD' }, nil)
+      harness.listener.on_log(levels::INFO, 'Hypertube handling INVOKE_STATIC_METHOD',
+                              { 'CommandType' => 'INVOKE_STATIC_METHOD' }, nil)
       harness.listener.on_log(levels::ERROR, 'failed', {}, RuntimeError.new('Password=hunter2'))
       harness.complete(call_span, nil, nil)
 
@@ -78,7 +79,8 @@ RSpec.describe Graftcode::Instrumentation::GraftcodeInstrumentation do
   it 'sends a logger at Information only the Hypertube lines at its level' do
     harness_class.open(minimum_log_level: levels::INFO) do |harness|
       hypertube_logger.get_logger.log_with_level(levels::DEBUG, 'Hypertube debug {Detail}', 'x')
-      hypertube_logger.get_logger.log_with_level(levels::INFO, 'Hypertube invoking {CommandType}', 'INVOKE_STATIC_METHOD')
+      hypertube_logger.get_logger.log_with_level(levels::INFO, 'Hypertube invoking {CommandType}',
+                                                 'INVOKE_STATIC_METHOD')
 
       expect(harness.logs.size).to eq(1)
       expect(harness.logs.first.severity_text).to eq('Information')

@@ -98,7 +98,8 @@ module Graftcode
 
       def resolve_type_name_from_command(command, depth)
         case command.command_type
-        when Hypertube::Utils::CommandType::VALUE
+        when Hypertube::Utils::CommandType::VALUE,
+             *TYPE_FROM_TARGET_COMMANDS
           resolve_type_name_core(payload_at(command, 0), depth + 1)
         when Hypertube::Utils::CommandType::GET_TYPE,
              Hypertube::Utils::CommandType::CAST,
@@ -108,8 +109,6 @@ module Graftcode
             return name unless blank?(name)
           end
           nil
-        when *TYPE_FROM_TARGET_COMMANDS
-          resolve_type_name_core(payload_at(command, 0), depth + 1)
         end
       end
     end

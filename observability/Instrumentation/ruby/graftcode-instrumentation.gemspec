@@ -17,13 +17,16 @@ Gem::Specification.new do |spec|
   end
   spec.require_paths = ['lib']
 
-  spec.add_runtime_dependency 'opentelemetry-api', '~> 1.11'
+  spec.add_dependency 'opentelemetry-api', '~> 1.11'
 
   spec.add_development_dependency 'graftcode-context', '~> 1.0'
   spec.add_development_dependency 'hypertube-ruby-sdk', '>= 3.2.0'
   spec.add_development_dependency 'opentelemetry-logs-sdk', '~> 0.4'
   spec.add_development_dependency 'opentelemetry-sdk', '~> 1.8'
   spec.add_development_dependency 'rspec', '~> 3.13'
+  spec.add_development_dependency 'rubocop', '~> 1.92'
+  spec.add_development_dependency 'rubocop-performance', '~> 1.27'
+  spec.add_development_dependency 'rubocop-rspec', '~> 3.10'
 
   spec.metadata['rubygems_mfa_required'] = 'true'
 end

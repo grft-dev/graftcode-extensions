@@ -37,6 +37,7 @@ RSpec.describe Graftcode::Instrumentation::OperationName do
 
   it 'falls back to the command type for an unknown shape' do
     expect(described_class.resolve(of(command_type::LOAD_LIBRARY, 'x.rb'))).to eq('hypertube.LOAD_LIBRARY')
-    expect(described_class.resolve(of(command_type::INVOKE_STATIC_METHOD, 'type'))).to eq('hypertube.INVOKE_STATIC_METHOD')
+    expect(described_class.resolve(of(command_type::INVOKE_STATIC_METHOD,
+                                      'type'))).to eq('hypertube.INVOKE_STATIC_METHOD')
   end
 end

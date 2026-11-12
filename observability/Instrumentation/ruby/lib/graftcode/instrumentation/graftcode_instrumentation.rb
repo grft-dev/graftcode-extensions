@@ -3,6 +3,7 @@
 require 'opentelemetry-api'
 require_relative 'hypertube_sdk'
 require_relative 'call_span'
+require_relative 'graftcode_instrumentation/log_recording'
 
 module Graftcode
   module Instrumentation
@@ -10,17 +11,10 @@ module Graftcode
       include Hypertube::Utils::Abstractions::IHypertubeInvocation
       include Hypertube::Utils::Abstractions::IHypertubeHandling
       include Hypertube::Utils::Logging::IHypertubeLogging
+      include LogRecording
 
       INSTRUMENTATION_NAME = 'Graftcode'
       LOGGER_NAME = 'Hypertube'
-
-      SEVERITY_NUMBER = {
-        Hypertube::Utils::Logging::LogsLevel::TRACE => 1,
-        Hypertube::Utils::Logging::LogsLevel::DEBUG => 5,
-        Hypertube::Utils::Logging::LogsLevel::INFO => 9,
-        Hypertube::Utils::Logging::LogsLevel::WARNING => 13,
-        Hypertube::Utils::Logging::LogsLevel::ERROR => 17
-      }.freeze
 
       def self.attach(tracer_provider, minimum_log_level: nil, logger_provider: nil)
         new(tracer_provider, minimum_log_level, logger_provider)
@@ -103,55 +97,6 @@ module Graftcode
 
       def current_span
         OpenTelemetry::Trace.current_span
-      end
-
-      def emit_log_record(level, message, properties, exception)
-        attributes = properties.to_h.dup
-        unless exception.nil?
-          attributes['exception.type'] = exception.class.name
-          set_if_present(attributes, 'exception.message', Hypertube::Utils::Logging::LogsRedactor.redact_value(exception.message))
-          set_if_present(attributes, 'exception.stacktrace', Hypertube::Utils::Logging::LogsRedactor.redact_value(stack_trace(exception)))
-        end
-
-        @logger.on_emit(
-          timestamp: Time.now,
-          severity_number: SEVERITY_NUMBER.fetch(level, 0),
-          severity_text: severity_text(level),
-          body: message,
-          attributes: attributes,
-          context: OpenTelemetry::Context.current
-        )
-      end
-
-      def severity_text(level)
-        level == Hypertube::Utils::Logging::LogsLevel::INFO ? 'Information' : Hypertube::Utils::Logging::LogsLevel.name_for(level)
-      end
-
-      def stack_trace(exception)
-        exception.full_message(highlight: false, order: :top)
-      end
-
-      def record_span_event(level, message, properties, exception)
-        span = current_span
-        return unless span.recording?
-
-        attributes = { 'log.level' => severity_text(level) }
-        properties.each { |key, value| attributes[key] = value }
-
-        if exception.nil?
-          span.add_event(message, attributes: attributes)
-          return
-        end
-
-        attributes['log.message'] = message
-        attributes['exception.type'] = exception.class.name
-        set_if_present(attributes, 'exception.message', Hypertube::Utils::Logging::LogsRedactor.redact_value(exception.message))
-        set_if_present(attributes, 'exception.stacktrace', Hypertube::Utils::Logging::LogsRedactor.redact_value(stack_trace(exception)))
-        span.add_event('exception', attributes: attributes)
-      end
-
-      def set_if_present(attributes, key, value)
-        attributes[key] = value unless value.nil?
       end
     end
   end

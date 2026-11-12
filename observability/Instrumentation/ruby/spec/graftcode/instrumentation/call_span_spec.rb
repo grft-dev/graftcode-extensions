@@ -78,7 +78,8 @@ RSpec.describe Graftcode::Instrumentation::CallSpan do
       connection = in_memory
       OpenTelemetry::Context.with_current(OpenTelemetry::Baggage.set_value('user', 'ada')) do
         call_span = harness.on_invoke(fetch, connection)
-        expect(connection.get_headers.keys).to contain_exactly(described_class::TRACE_PARENT_HEADER, described_class::TRACE_ID_HEADER)
+        expect(connection.get_headers.keys).to contain_exactly(described_class::TRACE_PARENT_HEADER,
+                                                               described_class::TRACE_ID_HEADER)
         harness.complete(call_span, nil, nil)
       end
     end

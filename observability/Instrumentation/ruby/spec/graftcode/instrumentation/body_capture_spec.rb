@@ -44,7 +44,7 @@ RSpec.describe Graftcode::Instrumentation::BodyCapture do
 
   it 'clamps the body limit' do
     expect(settings.clamp_body_max_characters(1)).to eq(settings::MINIMUM_BODY_MAX_CHARS)
-    expect(settings.clamp_body_max_characters(2**31 - 1)).to eq(settings::MAXIMUM_BODY_MAX_CHARS)
+    expect(settings.clamp_body_max_characters((2**31) - 1)).to eq(settings::MAXIMUM_BODY_MAX_CHARS)
   end
 
   it 'attaches no body while capture is disabled' do

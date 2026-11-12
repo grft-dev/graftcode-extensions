@@ -26,6 +26,9 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency 'hypertube-ruby-sdk', '>= 3.2.0'
   spec.add_development_dependency 'rack', '~> 3.1'
   spec.add_development_dependency 'rspec', '~> 3.13'
+  spec.add_development_dependency 'rubocop', '~> 1.92'
+  spec.add_development_dependency 'rubocop-performance', '~> 1.27'
+  spec.add_development_dependency 'rubocop-rspec', '~> 3.10'
 
   spec.metadata['rubygems_mfa_required'] = 'true'
 end
