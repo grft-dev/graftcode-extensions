@@ -23,7 +23,7 @@ Gem::Specification.new do |spec|
   spec.add_runtime_dependency 'opentelemetry-logs-sdk', '~> 0.4'
   spec.add_runtime_dependency 'opentelemetry-sdk', '~> 1.8'
 
-  spec.add_development_dependency 'hypertube-ruby-sdk', '>= 0.0.1'
+  spec.add_development_dependency 'hypertube-ruby-sdk', '>= 3.2.0'
   spec.add_development_dependency 'rack', '~> 3.1'
   spec.add_development_dependency 'rspec', '~> 3.13'
 

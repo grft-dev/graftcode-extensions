@@ -18,12 +18,15 @@ bundle install
 bundle exec rspec
 ```
 
-`hypertube-ruby-sdk` comes from rubygems.org. To test against an unreleased Hypertube build, publish it to the local gem repository and point `HYPERTUBE_GEM_SOURCE` at it:
+Dependencies are declared in `graftcode-instrumentation.gemspec`. `bundle install` resolves them from rubygems.org.
+
+To test against an unreleased `hypertube-ruby-sdk`, publish it to a local gem repository, install that build, then re-lock:
 
 ```powershell
 C:\dev\graft-packages\build-ruby.ps1
 C:\dev\graft-packages\serve-ruby.ps1   # keep running; Bundler uses the compact index only over HTTP
-$env:HYPERTUBE_GEM_SOURCE = "http://127.0.0.1:8808"
+gem install hypertube-ruby-sdk -v 3.1.18 --source http://127.0.0.1:8808
+bundle lock --update hypertube-ruby-sdk
 bundle install
 ```
 

@@ -79,4 +79,10 @@ bundle install
 bundle exec rspec
 ```
 
-`graftcode-instrumentation` is used from this repository and `hypertube-ruby-sdk` from rubygems.org. `HYPERTUBE_GEM_SOURCE` selects an unreleased Hypertube build, as described for the [instrumentation](../../../Instrumentation/ruby/README.md#development).
+Dependencies are declared in `graftcode-telemetry-datadog.gemspec`. From this monorepo, point Bundler at the local instrumentation gem before `bundle install`:
+
+```powershell
+bundle config set --local local.graftcode-instrumentation ../../../Instrumentation/ruby
+```
+
+For an unreleased `hypertube-ruby-sdk`, see [instrumentation development](../../../Instrumentation/ruby/README.md#development).

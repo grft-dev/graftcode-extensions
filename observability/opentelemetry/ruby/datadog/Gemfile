@@ -3,9 +3,3 @@
 source 'https://rubygems.org'
 
 gemspec
-
-gem 'graftcode-instrumentation', path: '../../../Instrumentation/ruby'
-
-source ENV.fetch('HYPERTUBE_GEM_SOURCE', 'https://rubygems.org') do
-  gem 'hypertube-ruby-sdk'
-end
