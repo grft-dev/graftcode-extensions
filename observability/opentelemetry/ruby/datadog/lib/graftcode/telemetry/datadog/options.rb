@@ -51,7 +51,10 @@ module Graftcode
 
         def validate!
           raise ArgumentError, 'service_name must be configured for Datadog telemetry.' if present(service_name).nil?
-          raise ArgumentError, 'minimum_log_level must be a Hypertube LogsLevel.' unless minimum_log_level.is_a?(Integer)
+          return if minimum_log_level.is_a?(Integer)
+
+          raise ArgumentError,
+                'minimum_log_level must be a Hypertube LogsLevel.'
         end
 
         private

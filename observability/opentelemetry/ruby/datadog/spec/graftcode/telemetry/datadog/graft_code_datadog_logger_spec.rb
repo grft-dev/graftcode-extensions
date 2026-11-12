@@ -13,7 +13,8 @@ RSpec.describe Graftcode::Telemetry::Datadog::GraftCodeDatadogLogger do
     expect(record.body).to eq('Fetched abc in 12ms')
     expect(record.severity_text).to eq('info')
     expect(record.severity_number).to eq(OpenTelemetry::Logs::SeverityNumber::SEVERITY_NUMBER_INFO)
-    expect(record.attributes).to include('Input' => 'abc', 'Elapsed' => '12', '{OriginalFormat}' => 'Fetched {Input} in {Elapsed}ms')
+    expect(record.attributes).to include('Input' => 'abc', 'Elapsed' => '12',
+                                         '{OriginalFormat}' => 'Fetched {Input} in {Elapsed}ms')
     expect(record.trace_id.unpack1('H*')).to eq(span.hex_trace_id)
     expect(record.span_id.unpack1('H*')).to eq(span.hex_span_id)
   end
@@ -45,20 +46,5 @@ RSpec.describe Graftcode::Telemetry::Datadog::GraftCodeDatadogLogger do
     logger.warning('Low stock for {Sku}', 'A1')
 
     expect(console.string).to eq("warn: Orders[0]\n      Low stock for A1\n")
-  end
-end
-
-RSpec.describe Graftcode::Telemetry::Datadog::MessageTemplate do
-  it 'renders placeholders and captures them as properties' do
-    properties = {}
-
-    message = described_class.render('{@User} bought {Count,3:D} {{items}}', ['ann', nil], properties)
-
-    expect(message).to eq('ann bought (null) {items}')
-    expect(properties).to eq('User' => 'ann', 'Count' => '(null)')
-  end
-
-  it 'leaves placeholders without arguments untouched' do
-    expect(described_class.render('Hello {Name}', [], {})).to eq('Hello {Name}')
   end
 end

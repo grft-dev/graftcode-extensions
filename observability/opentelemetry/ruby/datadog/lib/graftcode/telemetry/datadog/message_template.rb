@@ -6,43 +6,83 @@ module Graftcode
       module MessageTemplate
         NULL_VALUE = '(null)'
 
+        RenderState = Struct.new(:template, :arguments, :properties, :builder, :arg_index, :index,
+                                 keyword_init: true) do
+          def initialize(template, arguments, properties)
+            super(
+              template: template,
+              arguments: arguments,
+              properties: properties,
+              builder: +'',
+              arg_index: 0,
+              index: 0
+            )
+          end
+        end
+
         module_function
 
         def render(template, args, properties)
           return '' if template.nil?
 
-          values = args || []
-          builder = +''
-          arg_index = 0
-          index = 0
+          state = RenderState.new(template, args || [], properties)
+          consume_template(state)
+          state.builder
+        end
 
-          while index < template.length
-            character = template[index]
+        def consume_template(state)
+          consume_character(state) while state.index < state.template.length
+        end
 
-            if ['{', '}'].include?(character) && template[index + 1] == character
-              builder << character
-              index += 2
-              next
-            end
-
-            closing = character == '{' ? template.index('}', index + 1) : nil
-            if closing.nil? || arg_index >= values.length
-              builder << character
-              index += 1
-              next
-            end
-
-            value = format(values[arg_index])
-            arg_index += 1
-            builder << value
-
-            name = property_name(template[(index + 1)...closing])
-            properties[name] = value unless name.empty?
-
-            index = closing + 1
+        def consume_character(state)
+          if escaped_brace_at?(state)
+            write_escaped_brace(state)
+          elsif (closing = placeholder_closing_index(state))
+            write_placeholder(state, closing)
+          else
+            consume_literal(state)
           end
+        end
 
-          builder
+        def escaped_brace_at?(state)
+          character = state.template[state.index]
+          brace_character?(character) && state.template[state.index + 1] == character
+        end
+
+        def write_escaped_brace(state)
+          state.builder << state.template[state.index]
+          state.index += 2
+        end
+
+        def placeholder_closing_index(state)
+          return nil unless state.template[state.index] == '{'
+
+          closing = state.template.index('}', state.index + 1)
+          return nil if closing.nil? || state.arg_index >= state.arguments.length
+
+          closing
+        end
+
+        def write_placeholder(state, closing)
+          value = format(state.arguments[state.arg_index])
+          state.arg_index += 1
+          state.builder << value
+          assign_placeholder_property(state, closing, value)
+          state.index = closing + 1
+        end
+
+        def assign_placeholder_property(state, closing, value)
+          name = property_name(state.template[(state.index + 1)...closing])
+          state.properties[name] = value unless name.empty?
+        end
+
+        def consume_literal(state)
+          state.builder << state.template[state.index]
+          state.index += 1
+        end
+
+        def brace_character?(character)
+          ['{', '}'].include?(character)
         end
 
         def property_name(placeholder)

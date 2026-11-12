@@ -22,27 +22,12 @@ module Graftcode
         def call(env)
           method = env['REQUEST_METHOD'].to_s
           path = resolve_path(env)
-          parent = OpenTelemetry::Trace::Propagation::TraceContext.text_map_propagator.extract(
-            env,
-            getter: OpenTelemetry::Common::Propagation.rack_env_getter
-          )
-
-          span = @telemetry.tracer.start_span(
-            self.class.operation_name(@telemetry.service_name, method, path, nil),
-            with_parent: parent,
-            kind: :server,
-            attributes: { 'http.method' => method, 'http.route' => path }
-          )
-          token = OpenTelemetry::Context.attach(OpenTelemetry::Trace.context_with_span(span))
+          span, token = start_request_tracing(env, method, path)
 
           begin
-            status, headers, body = @app.call(env)
-            span.set_attribute('http.status_code', status.to_i)
-            span.status = OpenTelemetry::Trace::Status.error if status.to_i >= 500
-            [status, headers, body]
+            dispatch_request(env, span)
           rescue Exception => e # rubocop:disable Lint/RescueException
-            span.record_exception(e)
-            span.status = OpenTelemetry::Trace::Status.error(e.message.to_s)
+            record_request_failure(span, e)
             raise
           ensure
             complete(span, env, method, path)
@@ -57,17 +42,71 @@ module Graftcode
         end
 
         def self.controller_name(env)
-          explicit = env[CONTROLLER_KEY]
-          return explicit if explicit.is_a?(String) && !explicit.strip.empty?
+          explicit = explicit_controller_name(env)
+          return explicit if explicit
 
-          controller = env[RAILS_CONTROLLER_KEY]
+          rails_controller_name(env[RAILS_CONTROLLER_KEY])
+        end
+
+        def self.explicit_controller_name(env)
+          explicit = env[CONTROLLER_KEY]
+          return nil unless explicit.is_a?(String) && !explicit.strip.empty?
+
+          explicit
+        end
+
+        def self.rails_controller_name(controller)
           return nil if controller.nil?
 
-          name = controller.class.name.to_s.split('::').last.to_s
-          name.end_with?(CONTROLLER_SUFFIX) && name.length > CONTROLLER_SUFFIX.length ? name.delete_suffix(CONTROLLER_SUFFIX) : name
+          strip_controller_suffix(short_class_name(controller))
+        end
+
+        def self.short_class_name(controller)
+          controller.class.name.to_s.split('::').last.to_s
+        end
+
+        def self.strip_controller_suffix(name)
+          return name unless name.end_with?(CONTROLLER_SUFFIX) && name.length > CONTROLLER_SUFFIX.length
+
+          name.delete_suffix(CONTROLLER_SUFFIX)
         end
 
         private
+
+        def start_request_tracing(env, method, path)
+          parent = extract_parent(env)
+          span = @telemetry.tracer.start_span(
+            self.class.operation_name(@telemetry.service_name, method, path, nil),
+            with_parent: parent,
+            kind: :server,
+            attributes: { 'http.method' => method, 'http.route' => path }
+          )
+          token = OpenTelemetry::Context.attach(OpenTelemetry::Trace.context_with_span(span))
+          [span, token]
+        end
+
+        def dispatch_request(env, span)
+          status, headers, body = @app.call(env)
+          apply_response_status(span, status)
+          [status, headers, body]
+        end
+
+        def extract_parent(env)
+          OpenTelemetry::Trace::Propagation::TraceContext.text_map_propagator.extract(
+            env,
+            getter: OpenTelemetry::Common::Propagation.rack_env_getter
+          )
+        end
+
+        def apply_response_status(span, status)
+          span.set_attribute('http.status_code', status.to_i)
+          span.status = OpenTelemetry::Trace::Status.error if status.to_i >= 500
+        end
+
+        def record_request_failure(span, exception)
+          span.record_exception(exception)
+          span.status = OpenTelemetry::Trace::Status.error(exception.message.to_s)
+        end
 
         def complete(span, env, method, path)
           route = route_template(env) || path

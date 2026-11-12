@@ -71,29 +71,35 @@ module Graftcode
 
         def emit(level, template, message, properties, exception)
           severity_number, severity_text, = SEVERITY.fetch(level)
-          attributes = properties.dup
-          attributes[ORIGINAL_FORMAT] = template unless template.nil?
-
-          unless exception.nil?
-            attributes['exception.type'] = exception.class.name
-            attributes['exception.message'] = exception.message unless exception.message.nil?
-            attributes['exception.stacktrace'] = exception.full_message(highlight: false)
-          end
-
           @otel_logger.on_emit(
             timestamp: Time.now,
             severity_number: severity_number,
             severity_text: severity_text,
             body: message,
-            attributes: attributes,
+            attributes: emit_attributes(template, properties, exception),
             context: OpenTelemetry::Context.current
           )
+        end
+
+        def emit_attributes(template, properties, exception)
+          attributes = properties.dup
+          attributes[ORIGINAL_FORMAT] = template unless template.nil?
+          merge_exception_attributes!(attributes, exception)
+          attributes
+        end
+
+        def merge_exception_attributes!(attributes, exception)
+          return if exception.nil?
+
+          attributes['exception.type'] = exception.class.name
+          attributes['exception.message'] = exception.message unless exception.message.nil?
+          attributes['exception.stacktrace'] = exception.full_message(highlight: false)
         end
 
         def write_to_console(level, message, exception)
           return if @console.nil?
 
-          line = +"#{SEVERITY.fetch(level)[2]}: #{category}[0]\n#{CONSOLE_INDENT}#{message}"
+          line = "#{SEVERITY.fetch(level)[2]}: #{category}[0]\n#{CONSOLE_INDENT}#{message}"
           line << "\n#{exception.full_message(highlight: false).strip}" unless exception.nil?
 
           @console_mutex.synchronize { @console.puts(line) }
