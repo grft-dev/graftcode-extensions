@@ -28,17 +28,10 @@ public sealed class ServiceContext
 
     public string OperationName => $"{ClassName}.{MethodName}";
 
-    public string? UserId { get; set; }
-
     public T GetRequiredService<T>() where T : notnull => Services.GetRequiredService<T>();
 
     public T? GetService<T>() => Services.GetService<T>();
 
     public object? GetParameter(string name) =>
         Parameters.FirstOrDefault(parameter => parameter.Name.Equals(name, StringComparison.OrdinalIgnoreCase)).Value;
-
-    public string GetRequiredUserId() =>
-        UserId ?? throw new InvalidOperationException(
-            $"{OperationName} requires an authenticated user, but none was resolved. " +
-            "Ensure a token parameter is supplied and the authentication step is registered.");
 }

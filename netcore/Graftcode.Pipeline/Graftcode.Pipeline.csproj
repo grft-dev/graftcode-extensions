@@ -9,7 +9,7 @@
     <Title>Graftcode Pipeline</Title>
     <Authors>Graftcode S.A.</Authors>
     <Company>Graftcode S.A.</Company>
-    <Description>Middleware pipeline for Graftcode service invocations, with logging and token authentication.</Description>
+    <Description>Middleware pipeline for Graftcode service invocations.</Description>
     <PackageTags>Graftcode;Pipeline;Middleware</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
@@ -24,7 +24,6 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
-    <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.1" />
   </ItemGroup>
 
 </Project>
