@@ -29,7 +29,7 @@ Create a GitHub Actions Environment named `packages` and configure:
 - `MAVEN_GPG_PRIVATE_KEY` and `MAVEN_GPG_PASSPHRASE`: the signing key and its
   passphrase. The public key must be published to a key server.
 - `RUBYGEMS_API_KEY`: a RubyGems API key with permission to publish both Ruby
-  gems and MFA bypass enabled (the gemspecs require MFA).
+  gems. The Ruby gems do not require MFA for publishing.
 - NuGet Trusted Publishing is used for the .NET packages; configure the
   `packages` environment as a trusted publisher for the NuGet account.
 
