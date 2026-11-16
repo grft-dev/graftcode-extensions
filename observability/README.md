@@ -1,7 +1,7 @@
 # Observability packages
 
-This directory contains OpenTelemetry instrumentation and Application Insights
-connectors for .NET, Java, Python, and Node.js.
+This directory contains OpenTelemetry instrumentation and telemetry connectors
+for .NET, Java, Python, Node.js, and Ruby.
 
 ## Published packages
 
@@ -11,8 +11,9 @@ connectors for .NET, Java, Python, and Node.js.
 | Java | `com.graftcode:graftcode-instrumentation` | `com.graftcode:graftcode-appinsights-connector` |
 | Python | `graftcode-instrumentation` | `graftcode-telemetry-appinsights` |
 | Node.js | `graftcode-instrumentation` | `graftcode-appinsights-connector` |
+| Ruby | `graftcode-instrumentation` | `graftcode-telemetry-datadog` |
 
-The release workflow publishes all eight packages at the same version. Push a
+The release workflow publishes all ten packages at the same version. Push a
 tag named `observability-vX.Y.Z`, or run **Observability Packages** manually and
 provide the package version. Pull requests and pushes to `main` only build and
 test; they never publish.
@@ -27,6 +28,8 @@ Create a GitHub Actions Environment named `packages` and configure:
   Portal user token.
 - `MAVEN_GPG_PRIVATE_KEY` and `MAVEN_GPG_PASSPHRASE`: the signing key and its
   passphrase. The public key must be published to a key server.
+- `RUBYGEMS_API_KEY`: a RubyGems API key with permission to publish both Ruby
+  gems and MFA bypass enabled (the gemspecs require MFA).
 - NuGet Trusted Publishing is used for the .NET packages; configure the
   `packages` environment as a trusted publisher for the NuGet account.
 

@@ -4,7 +4,7 @@ require_relative 'lib/graftcode/instrumentation/version'
 
 Gem::Specification.new do |spec|
   spec.name = 'graftcode-instrumentation'
-  spec.version = Graftcode::Instrumentation::VERSION
+  spec.version = ENV.fetch('VERSION', Graftcode::Instrumentation::VERSION)
   spec.authors = ['Graftcode S.A.']
   spec.email = ['support@graftcode.com']
   spec.summary = 'OpenTelemetry instrumentation for Graftcode (Hypertube) calls in Ruby'

@@ -4,7 +4,7 @@ require_relative 'lib/graftcode/telemetry/datadog/version'
 
 Gem::Specification.new do |spec|
   spec.name = 'graftcode-telemetry-datadog'
-  spec.version = Graftcode::Telemetry::Datadog::VERSION
+  spec.version = ENV.fetch('VERSION', Graftcode::Telemetry::Datadog::VERSION)
   spec.authors = ['Graftcode S.A.']
   spec.email = ['support@graftcode.com']
   spec.summary = 'Datadog telemetry for Graftcode (Hypertube) applications in Ruby'

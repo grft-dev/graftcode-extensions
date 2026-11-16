@@ -47,6 +47,10 @@ jobs:
         with:
           node-version: "22"
 
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+
       - name: Test .NET instrumentation
         run: dotnet test observability/Instrumentation/dotnet/tests/Graftcode.Instrumentation.Tests/Graftcode.Instrumentation.Tests.csproj --configuration Release
 
@@ -67,6 +71,27 @@ jobs:
           python -m pip install -e 'observability/Instrumentation/python[dev]'
           python -m pip install -e 'observability/opentelemetry/python/appinsights[dev]'
           python -m pytest observability/Instrumentation/python/tests observability/opentelemetry/python/appinsights/tests
+
+      - name: Test Ruby packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          instrumentation=observability/Instrumentation/ruby
+          datadog=observability/opentelemetry/ruby/datadog
+          export BUNDLE_APP_CONFIG="${RUNNER_TEMP}/bundler"
+          system_gem_path="$(ruby -e 'puts Gem.path.join(":")')"
+          export GEM_HOME="${RUNNER_TEMP}/rubygems"
+          export GEM_PATH="${GEM_HOME}:${system_gem_path}"
+          mkdir -p "${GEM_HOME}"
+          (cd "${instrumentation}" && bundle install && bundle exec rspec)
+          (
+            cd "${instrumentation}"
+            gem build graftcode-instrumentation.gemspec \
+              --output "${RUNNER_TEMP}/graftcode-instrumentation.gem"
+          )
+          gem install --no-document --ignore-dependencies --install-dir "${GEM_HOME}" \
+            "${RUNNER_TEMP}/graftcode-instrumentation.gem"
+          (cd "${datadog}" && bundle install && bundle exec rspec)
 
       - name: Check Node.js package archives
         shell: bash
@@ -193,6 +218,38 @@ jobs:
         with:
           password: ${{ secrets.PIP_PUBLISH_TOKEN }}
           packages-dir: artifacts/pypi/
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+
+      - name: Build Ruby gems
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/rubygems
+          (
+            cd observability/Instrumentation/ruby
+            VERSION="${VERSION}" gem build graftcode-instrumentation.gemspec \
+              --output "${GITHUB_WORKSPACE}/artifacts/rubygems/graftcode-instrumentation-${VERSION}.gem"
+          )
+          (
+            cd observability/opentelemetry/ruby/datadog
+            VERSION="${VERSION}" gem build graftcode-telemetry-datadog.gemspec \
+              --output "${GITHUB_WORKSPACE}/artifacts/rubygems/graftcode-telemetry-datadog-${VERSION}.gem"
+          )
+
+      - name: Publish Ruby gems to RubyGems
+        shell: bash
+        env:
+          GEM_HOST_API_KEY: ${{ secrets.RUBYGEMS_API_KEY }}
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          set -euo pipefail
+          gem push "artifacts/rubygems/graftcode-instrumentation-${VERSION}.gem"
+          gem push "artifacts/rubygems/graftcode-telemetry-datadog-${VERSION}.gem"
 
       - uses: actions/setup-node@v4
         with:
