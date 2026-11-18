@@ -1,0 +1,47 @@
+{
+    "name": "graftcode/telemetry-datadog",
+    "description": "Datadog traces, logs, and Graft bridge spans for a PHP service in one call, exported over OTLP/HTTP to the Datadog Agent.",
+    "version": "1.0.0",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Graftcode S.A.",
+            "email": "support@graftcode.com"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "graftcode/instrumentation": "^1.0",
+        "guzzlehttp/guzzle": "^7.9",
+        "open-telemetry/exporter-otlp": "^1.5",
+        "open-telemetry/sdk": "^1.16",
+        "psr/http-server-middleware": "^1.0"
+    },
+    "require-dev": {
+        "graftcode/hypertube-php-sdk": "^3.2",
+        "nyholm/psr7": "^1.8",
+        "phpunit/phpunit": "^11.5"
+    },
+    "autoload": {
+        "psr-4": {
+            "Graftcode\\Telemetry\\Datadog\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Graftcode\\Telemetry\\Datadog\\Tests\\": "tests/"
+        }
+    },
+    "archive": {
+        "exclude": ["/tests", "/vendor", "phpunit.xml", "composer.lock"]
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "php-http/discovery": true,
+            "tbachert/spi": true
+        }
+    },
+    "minimum-stability": "stable"
+}
