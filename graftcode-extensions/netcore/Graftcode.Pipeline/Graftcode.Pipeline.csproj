@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net6.0;net7.0;net8.0;net9.0;net10.0</TargetFrameworks>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <PackageId>Graftcode.Pipeline</PackageId>
+    <Version>1.0.0</Version>
+    <Title>Graftcode Pipeline</Title>
+    <Authors>Graftcode S.A.</Authors>
+    <Company>Graftcode S.A.</Company>
+    <Description>Middleware pipeline for Graftcode service invocations.</Description>
+    <PackageTags>Graftcode;Pipeline;Middleware</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageProjectUrl>https://github.com/grft-dev/graftcode-extensions</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/grft-dev/graftcode-extensions</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
+  </ItemGroup>
+
+</Project>
