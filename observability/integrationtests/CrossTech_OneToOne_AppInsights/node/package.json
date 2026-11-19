@@ -1,0 +1,13 @@
+{
+    "name": "crosstech-onetoone-appinsights-node-caller",
+    "version": "1.0.0",
+    "private": true,
+    "type": "module",
+    "description": "Node.js caller for CrossTech_OneToOne_AppInsights matrix.",
+    "dependencies": {
+        "@opentelemetry/api": "^1.9.1",
+        "graftcode-appinsights-connector": "file:../../../../../graft-packages/graftcode-appinsights-connector-1.0.0.tgz",
+        "graftcode-instrumentation": "file:../../../../../graft-packages/graftcode-instrumentation-1.0.0.tgz",
+        "hypertube-nodejs-sdk": "file:../../../../../graft-packages/hypertube-nodejs-sdk-0.0.1.tgz"
+    }
+}

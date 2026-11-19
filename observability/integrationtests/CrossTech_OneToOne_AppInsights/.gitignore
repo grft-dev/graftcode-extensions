@@ -1,0 +1,7 @@
+.env
+logs/
+CrossTech_OneToOne_AppInsights-results.csv
+dotnet/bin/
+dotnet/obj/
+java/target/
+node/node_modules/

@@ -87,7 +87,9 @@ function startAzureMonitor(serviceName, connectionString, options) {
                 enabled: true,
                 ...http,
                 ignoreOutgoingRequestHook: (request) =>
-                    isWebSocketUpgrade(request) || Boolean(userIgnoreOutgoing?.(request)),
+                    isWebSocketUpgrade(request) ||
+                    isApplicationInsightsIngestion(request) ||
+                    Boolean(userIgnoreOutgoing?.(request)),
             },
         },
     })
@@ -105,6 +107,15 @@ function isWebSocketUpgrade(request) {
     return Object.entries(headers).some(
         ([name, value]) => name.toLowerCase() === 'upgrade' && String(value).toLowerCase() === 'websocket'
     )
+}
+
+function isApplicationInsightsIngestion(request) {
+    const host = String(request?.hostname ?? request?.host ?? '').toLowerCase()
+    if (host.includes('applicationinsights.azure.com')) {
+        return true
+    }
+    const path = String(request?.path ?? request?.pathname ?? '').toLowerCase()
+    return path.includes('/v2.1/track') || path.includes('/v2/track')
 }
 
 async function forceFlush() {
