@@ -1,0 +1,22 @@
+{
+  "hosts": {
+    "Php": {
+      "port": 9380,
+      "ws": "ws://localhost:9380/ws",
+      "runtimeArg": "php",
+      "typeName": "TestGgPhpLib\\RandomService",
+      "methodName": "fetch",
+      "serviceName": "TestGgPhpLib"
+    },
+    "Ruby": {
+      "port": 9480,
+      "ws": "ws://localhost:9480/ws",
+      "runtimeArg": "ruby",
+      "typeName": "RandomService",
+      "methodName": "fetch",
+      "serviceName": "TestGgRubyLib"
+    }
+  },
+  "callers": ["Php", "Ruby"],
+  "datadogSearchTemplate": "trace_id:{traceId}"
+}

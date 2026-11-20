@@ -1,0 +1,12 @@
+# frozen_string_literal: true
+
+source 'https://rubygems.org'
+
+source ENV.fetch('GRAFTCODE_GEM_SOURCE', 'http://127.0.0.1:8808') do
+  gem 'graftcode-instrumentation', '1.0.0'
+  gem 'graftcode-telemetry-datadog', '1.0.0'
+end
+
+source ENV.fetch('HYPERTUBE_GEM_SOURCE', 'https://rubygems.org') do
+  gem 'hypertube-ruby-sdk'
+end
