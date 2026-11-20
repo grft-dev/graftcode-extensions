@@ -1,0 +1,8 @@
+.env
+logs/
+CrossTech_OneToOne_AppInsights_To_DataDog-results.csv
+dotnet/bin/
+dotnet/obj/
+node/node_modules/
+ruby/.bundle/
+ruby/Gemfile.lock

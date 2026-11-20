@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>com.graftcode.samples.crosstech.onetoone</RootNamespace>
+    <AssemblyName>CrossTechOneToOneAppInsightsToDataDogRunner</AssemblyName>
+    <HypertubeDevBinaries Condition="'$(HypertubeDevBinaries)' == ''">C:\dev\TestGgLib\TestGgLib\bin\Release\net8.0</HypertubeDevBinaries>
+    <GraftAppInsightsConnectorProject>..\..\..\opentelemetry\dotnet\appinsights\GraftCode.Netcore.Telemetry.AppInsightsConnector\GraftCode.Netcore.Telemetry.AppInsightsConnector.csproj</GraftAppInsightsConnectorProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="$(GraftAppInsightsConnectorProject)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="Hypertube.Netcore.Sdk" HintPath="$(HypertubeDevBinaries)\Hypertube.Netcore.Sdk.dll" />
+    <Reference Include="Hypertube.Netcore.Core" HintPath="$(HypertubeDevBinaries)\Hypertube.Netcore.Core.dll" />
+  </ItemGroup>
+
+  <Target Name="OverlayHypertubeDevBinaries" AfterTargets="Build" Condition="Exists('$(HypertubeDevBinaries)')">
+    <ItemGroup>
+      <HypertubeDevBinary Include="$(HypertubeDevBinaries)\Hypertube.Netcore.*.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(HypertubeDevBinary)" DestinationFolder="$(OutDir)" OverwriteReadOnlyFiles="true" />
+  </Target>
+
+</Project>

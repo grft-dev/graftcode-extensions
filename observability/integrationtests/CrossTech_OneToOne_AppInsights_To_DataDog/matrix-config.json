@@ -1,0 +1,39 @@
+{
+  "hosts": {
+    "DotNet": {
+      "port": 9580,
+      "ws": "ws://localhost:9580/ws",
+      "runtimeArg": "netcore",
+      "typeName": "TestGgLib.RandomService",
+      "methodName": "Fetch",
+      "serviceName": "TestGgLib",
+      "telemetry": "appInsights"
+    },
+    "Node": {
+      "port": 9680,
+      "ws": "ws://localhost:9680/ws",
+      "runtimeArg": "nodejs",
+      "typeName": "RandomService",
+      "methodName": "fetch",
+      "serviceName": "TestGgNodeLib",
+      "telemetry": "appInsights"
+    },
+    "Ruby": {
+      "port": 9780,
+      "ws": "ws://localhost:9780/ws",
+      "runtimeArg": "ruby",
+      "typeName": "RandomService",
+      "methodName": "fetch",
+      "serviceName": "TestGgRubyLib",
+      "telemetry": "datadog"
+    }
+  },
+  "pairs": [
+    { "caller": "DotNet", "callee": "Ruby" },
+    { "caller": "Ruby", "callee": "DotNet" },
+    { "caller": "Node", "callee": "Ruby" },
+    { "caller": "Ruby", "callee": "Node" }
+  ],
+  "appInsightsSearchTemplate": "union requests, dependencies, traces | where operation_Id == \"{traceId}\"",
+  "datadogSearchTemplate": "trace_id:{traceId}"
+}
