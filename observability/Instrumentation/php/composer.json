@@ -1,0 +1,47 @@
+{
+    "name": "graftcode/instrumentation",
+    "description": "OpenTelemetry instrumentation for Graftcode (Hypertube) calls in PHP: call spans, W3C trace context propagation, and Hypertube log forwarding.",
+    "version": "1.0.0",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Graftcode S.A.",
+            "email": "support@graftcode.com"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "open-telemetry/api": "^1.11"
+    },
+    "require-dev": {
+        "graftcode/hypertube-php-sdk": "^3.2",
+        "nyholm/psr7": "^1.8",
+        "open-telemetry/sdk": "^1.16",
+        "phpunit/phpunit": "^11.5"
+    },
+    "suggest": {
+        "graftcode/hypertube-php-sdk": "Required at runtime; a library hosted by Graftcode Gateway uses the SDK from the gateway's Binaries folder instead."
+    },
+    "autoload": {
+        "psr-4": {
+            "Graftcode\\Instrumentation\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Graftcode\\Instrumentation\\Tests\\": "tests/"
+        }
+    },
+    "archive": {
+        "exclude": ["/tests", "/vendor", "phpunit.xml", "composer.lock"]
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "php-http/discovery": true,
+            "tbachert/spi": true
+        }
+    },
+    "minimum-stability": "stable"
+}

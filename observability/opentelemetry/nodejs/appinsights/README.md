@@ -50,7 +50,7 @@ Telemetry is not exported to Azure, but a local `NodeTracerProvider` still assig
 
 ## HTTP auto-instrumentation
 
-Azure Monitor HTTP instrumentation stays enabled. Outgoing requests that are WebSocket upgrades (`Upgrade: websocket`) are ignored so the long-lived handshake is not tied to a single HTTP request; each Graft call is already described by the Graftcode span.
+Azure Monitor HTTP instrumentation stays enabled. Outgoing requests that are WebSocket upgrades (`Upgrade: websocket`) are ignored so the long-lived handshake is not tied to a single HTTP request; each Graft call is already described by the Graftcode span. Exporter calls to `*.applicationinsights.azure.com` (`/v2/track`, `/v2.1/track`) are also ignored so ingest traffic is not parented under Graft business spans.
 
 ## App logger
 

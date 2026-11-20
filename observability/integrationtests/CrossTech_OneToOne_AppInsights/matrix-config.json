@@ -1,0 +1,55 @@
+{
+  "hosts": {
+    "Netcore": {
+      "port": 8080,
+      "ws": "ws://localhost:8080/ws",
+      "runtimeArg": "netcore",
+      "typeName": "TestGgLib.RandomService",
+      "methodName": "Fetch",
+      "serviceName": "TestGgLib",
+      "start": {
+        "cwd": "C:\\dev\\TestGgLib\\TestGgLib\\bin\\Release\\net8.0",
+        "args": [".\\TestGgLib.dll", "--initMethod", "TestGgLib.Program.Main", "--port", "8080", "--httpPort", "8081", "--tcpPort", "8082", "--http2Port", "8083", "--doNotExtractBinaries"]
+      }
+    },
+    "Java": {
+      "port": 9080,
+      "ws": "ws://localhost:9080/ws",
+      "runtimeArg": "jvm",
+      "typeName": "testggjavalib.RandomService",
+      "methodName": "fetch",
+      "serviceName": "TestGgJavaLib",
+      "start": {
+        "cwd": "C:\\dev\\TestGgJavaLib\\target",
+        "args": [".\\TestGgJavaLib.jar", "--runtime", "jvm", "--port", "9080", "--httpPort", "9081", "--tcpPort", "9082", "--http2Port", "9083", "--doNotExtractBinaries"]
+      }
+    },
+    "Node": {
+      "port": 9180,
+      "ws": "ws://localhost:9180/ws",
+      "runtimeArg": "nodejs",
+      "typeName": "RandomService",
+      "methodName": "fetch",
+      "serviceName": "TestGgNodeLib",
+      "start": {
+        "cwd": "C:\\dev\\TestGgNodeLib",
+        "args": ["./index.mjs", "--runtime", "nodejs", "--port", "9180", "--httpPort", "9181", "--tcpPort", "9182", "--http2Port", "9183", "--doNotExtractBinaries"]
+      }
+    },
+    "Python": {
+      "port": 9280,
+      "ws": "ws://localhost:9280/ws",
+      "runtimeArg": "python",
+      "typeName": "TestGgPythonLib.RandomService.RandomService",
+      "methodName": "fetch",
+      "serviceName": "TestGgPythonLib",
+      "start": {
+        "cwd": "C:\\dev\\TestGgPythonLib",
+        "script": "run-host.ps1",
+        "port": 9280
+      }
+    }
+  },
+  "callers": ["DotNet", "Java", "Python", "Node"],
+  "appInsightsSearchTemplate": "union requests, dependencies, traces | where operation_Id == \"{traceId}\" | summarize count() by itemType, cloud_RoleName"
+}
