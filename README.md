@@ -16,6 +16,8 @@ All local Docker setups, ports, and startup instructions are documented in
 [communication-plugin-samples/README.md](communication-plugin-samples/README.md). Each setup starts its middleware and
 three Gateway servers consuming from the same request destination.
 
+Payment provider plugins for paid MCP tools (x402 in the Gateway core) live under [payment-plugins](payment-plugins/README.md): [zevio](payment-plugins/zevio/Readme.md) (`payment.zevio`). They are not transport plugins and are loaded through the Gateway `--paymentConfig`, not `--config`.
+
 OpenTelemetry / Application Insights lives under [observability/opentelemetry](observability/opentelemetry/dotnet/appinsights/GraftCode.Netcore.Telemetry.AppInsightsConnector/README.md). It is not a transport plugin.
 
 Use RabbitMQ or Kafka when you already run that broker. Use Service Bus or SQS when the deployment is already on Azure or AWS. Use Pub/Sub when the deployment is already on Google Cloud. SQS and Pub/Sub each need one reply destination per client process; Service Bus can share one session-enabled reply queue.
