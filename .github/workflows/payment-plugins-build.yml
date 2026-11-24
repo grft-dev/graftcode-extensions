@@ -23,7 +23,7 @@ jobs:
       fail-fast: false
       matrix:
         plugin: [zevio]
-        platform: [windows-latest, windows-11-arm, ubuntu-22.04, ubuntu-22.04-arm, macos-26-intel, macos-14]
+        platform: [windows-latest, windows-11-arm, ubuntu-22.04, ubuntu-22.04-arm, macos-26-intel, macos-15]
 
     steps:
       - uses: actions/checkout@v5
@@ -47,7 +47,7 @@ jobs:
             macos-26-intel)
               echo "PACKAGE_SUFFIX=macos-x86_64" >> "$GITHUB_ENV"
               ;;
-            macos-14)
+            macos-15)
               echo "PACKAGE_SUFFIX=macos-arm64" >> "$GITHUB_ENV"
               ;;
             *)
