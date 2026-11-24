@@ -402,17 +402,25 @@ HttpResponse HttpClient::send(const std::string& method, const std::string& path
 		curl_easy_setopt(easy.handle, CURLOPT_VERBOSE, 1L);
 	}
 
-	const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs_);
+	// timeoutMs 0 is the WinHTTP value for no timeout. libcurl uses 0 the same way.
+	const bool unlimited = timeoutMs_ <= 0;
+	const auto deadline = unlimited
+		? std::chrono::steady_clock::time_point{}
+		: std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs_);
 	CURLcode code = CURLE_OPERATION_TIMEDOUT;
 	for (std::size_t i = 0; i < attempts.size(); ++i) {
-		const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(
-			deadline - std::chrono::steady_clock::now()).count();
-		if (left <= 0) break;
+		long timeout = 0;
+		if (!unlimited) {
+			const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(
+				deadline - std::chrono::steady_clock::now()).count();
+			if (left <= 0) break;
+			timeout = static_cast<long>(left);
+		}
 		response.body.clear();
 		requestSent = false;
 		errorBuffer[0] = '\0';
-		curl_easy_setopt(easy.handle, CURLOPT_TIMEOUT_MS, static_cast<long>(left));
-		curl_easy_setopt(easy.handle, CURLOPT_CONNECTTIMEOUT_MS, static_cast<long>(left));
+		curl_easy_setopt(easy.handle, CURLOPT_TIMEOUT_MS, timeout);
+		curl_easy_setopt(easy.handle, CURLOPT_CONNECTTIMEOUT_MS, timeout);
 		if (i > 0)
 			curl_easy_setopt(easy.handle, CURLOPT_FRESH_CONNECT, 1L);
 		if (attempts[i].overrideProxy) {

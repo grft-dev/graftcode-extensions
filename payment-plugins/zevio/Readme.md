@@ -77,6 +77,6 @@ The merchant quote returns a `reference` (here `haircut`); `offers` maps it to t
 | `apiUrl` | no | | API base URL override. |
 | `customerEmail` | no | `poc-agent@example.com` | Payer e-mail sent with the payment. |
 | `language` | no | `PL` | `PL` or `EN` checkout language. |
-| `timeoutMs` | no | `30000` | HTTP timeout per request. |
+| `timeoutMs` | no | `30000` | HTTP timeout per request. `0` waits without a limit. |
 
 Limits: no webhooks (status by polling `GET /payments`), no refunds, one offer = fixed price.
