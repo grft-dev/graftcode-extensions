@@ -4,6 +4,7 @@
 
 #include <cctype>
 #include <chrono>
+#include <climits>
 #include <mutex>
 #include <stdexcept>
 #include <string>
@@ -402,25 +403,29 @@ HttpResponse HttpClient::send(const std::string& method, const std::string& path
 		curl_easy_setopt(easy.handle, CURLOPT_VERBOSE, 1L);
 	}
 
-	// timeoutMs 0 is the WinHTTP value for no timeout. libcurl uses 0 the same way.
+	// timeoutMs 0 matches WinHTTP: no limit. libcurl treats a connect timeout of 0
+	// as its 300-second default, so the connect phase uses the largest accepted value.
 	const bool unlimited = timeoutMs_ <= 0;
+	constexpr long kUnlimitedConnectTimeoutMs = LONG_MAX;
 	const auto deadline = unlimited
 		? std::chrono::steady_clock::time_point{}
 		: std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs_);
 	CURLcode code = CURLE_OPERATION_TIMEDOUT;
 	for (std::size_t i = 0; i < attempts.size(); ++i) {
-		long timeout = 0;
+		long transferTimeout = 0;
+		long connectTimeout = kUnlimitedConnectTimeoutMs;
 		if (!unlimited) {
 			const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(
 				deadline - std::chrono::steady_clock::now()).count();
 			if (left <= 0) break;
-			timeout = static_cast<long>(left);
+			transferTimeout = static_cast<long>(left);
+			connectTimeout = transferTimeout;
 		}
 		response.body.clear();
 		requestSent = false;
 		errorBuffer[0] = '\0';
-		curl_easy_setopt(easy.handle, CURLOPT_TIMEOUT_MS, timeout);
-		curl_easy_setopt(easy.handle, CURLOPT_CONNECTTIMEOUT_MS, timeout);
+		curl_easy_setopt(easy.handle, CURLOPT_TIMEOUT_MS, transferTimeout);
+		curl_easy_setopt(easy.handle, CURLOPT_CONNECTTIMEOUT_MS, connectTimeout);
 		if (i > 0)
 			curl_easy_setopt(easy.handle, CURLOPT_FRESH_CONNECT, 1L);
 		if (attempts[i].overrideProxy) {
