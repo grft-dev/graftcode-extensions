@@ -12,10 +12,6 @@ project ("ZevioPaymentPlugin" VERSION 0.1.0 LANGUAGES CXX)
 
 graftcode_apply_static_crt()
 
-if(NOT WIN32)
-    message(FATAL_ERROR "The Zevio payment plugin uses WinHTTP and builds on Windows only. Linux/macOS need a libcurl HTTP client (see Readme.md).")
-endif()
-
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
