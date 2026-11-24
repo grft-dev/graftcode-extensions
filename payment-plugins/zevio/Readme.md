@@ -13,25 +13,28 @@ It exports the payment provider C ABI from `GraftcodePluginsInterfaces/PaymentPr
 | `PaymentProviderVerify` | `GET /payments?qrId=..&from=..&sortBy=createdAt&sortOrder=desc`, picks the payment whose `metadata.challenge_id` matches. `success` is `paid` (amount and currency checked); `pending`/`failed` are `pending` (the payer can retry); other statuses are `failed`. |
 | `PaymentProviderFreeBuffer` | Frees every string the plugin returned. |
 
-It is written in C++20. HTTPS goes through WinHTTP (system TLS), so the plugin builds on **Windows only**; Linux and macOS need a libcurl-based `WinHttpClient` replacement. CMake FetchContent builds nlohmann/json `v3.12.0` (header-only). The MSVC CRT is static (`/MT`), so the release archive is `payment_zevio.dll` only. The first configure needs network access.
+It is written in C++20 and builds on Windows, Linux, and macOS. HTTPS goes through libcurl from vcpkg (`vcpkg.json`), linked into the plugin. Each call uses its own curl handle. On Windows the client resolves the system proxy with WinHTTP (automatic proxy, including a PAC script) and applies that proxy to the transfer. An intranet proxy authenticates with the current user's Negotiate or NTLM credentials, matching WinHTTP's default autologon policy. An internet proxy does not receive those credentials. CMake FetchContent builds nlohmann/json `v3.12.0` (header-only). On Windows the MSVC CRT is static (`/MT`) and vcpkg uses the `*-windows-static` triplet, so the release archive is the plugin library only: `payment_zevio.dll`, `payment_zevio.so`, or `payment_zevio.dylib`. The first configure needs network access.
 
 `GraftcodePluginsInterfaces/PaymentProviderAbi.h` is a copy of `src/GraftcodeGateway/Payments/PaymentProviderAbi.h` from [graftcode-gateway](https://github.com/grft-dev/graftcode-gateway) (branch `task/payment-native-plugin`). Keep the two files identical; bump `GG_PAYMENT_PROVIDER_ABI_VERSION` in both when the ABI changes.
 
 ## Build
 
-```powershell
-cd graftcode-extensions\payment-plugins\zevio
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release   # from a "x64 Native Tools" prompt (vcvars64)
+curl is declared in `vcpkg.json`. Point CMake at a vcpkg toolchain (GitHub-hosted runners set `VCPKG_INSTALLATION_ROOT`):
+
+```bash
+cd graftcode-extensions/payment-plugins/zevio
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
 cmake --build build --config Release
 ```
 
-Output: `payment-plugins/zevio/build/ZevioPlugin/payment_zevio.dll`. `cmake --install build --prefix <dir> --component plugin-runtime` copies only the DLL, like the communication plugins.
+Output: `payment-plugins/zevio/build/ZevioPlugin/payment_zevio.dll` (`.so` on Linux, `.dylib` on macOS). `cmake --install build --prefix <dir> --component plugin-runtime` copies only that library, like the communication plugins.
 
 Download `gg` with payment support from the `task/payment-native-plugin` branch of graftcode-gateway (option `--paymentConfig`).
 
 ## Gateway
 
-The plugin is loaded from the Gateway payment config (`gg ... --paymentConfig gg-payments.json`), not from `--config`. `library` is resolved relative to the config file; without it the Gateway looks for `payment_zevio.dll` next to the config file.
+The plugin is loaded from the Gateway payment config (`gg ... --paymentConfig gg-payments.json`), not from `--config`. `library` is resolved relative to the config file; without it the Gateway looks for `payment_zevio.dll`, `payment_zevio.so`, or `payment_zevio.dylib` next to the config file.
 
 ```json
 {
@@ -74,6 +77,6 @@ The merchant quote returns a `reference` (here `haircut`); `offers` maps it to t
 | `apiUrl` | no | | API base URL override. |
 | `customerEmail` | no | `poc-agent@example.com` | Payer e-mail sent with the payment. |
 | `language` | no | `PL` | `PL` or `EN` checkout language. |
-| `timeoutMs` | no | `30000` | HTTP timeout per request. |
+| `timeoutMs` | no | `30000` | HTTP timeout per request. `0` waits without a limit. |
 
 Limits: no webhooks (status by polling `GET /payments`), no refunds, one offer = fixed price.

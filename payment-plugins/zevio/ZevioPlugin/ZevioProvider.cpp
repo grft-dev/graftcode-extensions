@@ -9,7 +9,7 @@
 // Knows nothing about x402/MCP – that is Graftcode Gateway core. Never logs or returns the API key.
 
 #include "PaymentProviderAbi.h"
-#include "WinHttpClient.h"
+#include "HttpClient.h"
 
 #include <nlohmann/json.hpp>
 
@@ -139,7 +139,7 @@ namespace {
 }
 
 struct PaymentProviderInstance {
-	std::unique_ptr<WinHttpClient> http;
+	std::unique_ptr<HttpClient> http;
 	json offers;
 	std::string customerEmail;
 	std::string language;
@@ -296,7 +296,7 @@ PAYMENT_PLUGIN_EXPORT PaymentProviderInstance* CreatePaymentProvider(const char*
 		auto instance = std::make_unique<PaymentProviderInstance>();
 		instance->environment = config.value("environment", "sandbox");
 		const std::string baseUrl = config.value("apiUrl", "").empty() ? std::string(kSandboxUrl) : config.value("apiUrl", "");
-		instance->http = std::make_unique<WinHttpClient>(baseUrl, config["apiKey"].get<std::string>(), config.value("timeoutMs", 30000));
+		instance->http = std::make_unique<HttpClient>(baseUrl, config["apiKey"].get<std::string>(), config.value("timeoutMs", 30000));
 		instance->offers = config["offers"];
 		instance->customerEmail = config.value("customerEmail", "poc-agent@example.com");
 		instance->language = config.value("language", "PL");

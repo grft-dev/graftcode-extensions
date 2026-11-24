@@ -1,0 +1,164 @@
+name: Payment Plugins Build
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - "payment-plugins/**"
+      - "communication-plugins/cmake/**"
+      - ".github/workflows/payment-plugins-build.yml"
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - "payment-plugins/**"
+      - "communication-plugins/cmake/**"
+      - ".github/workflows/payment-plugins-build.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build ${{ matrix.plugin }} (${{ matrix.platform }})
+    runs-on: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        plugin: [zevio]
+        platform: [windows-latest, windows-11-arm, ubuntu-22.04, ubuntu-22.04-arm, macos-26-intel, macos-15]
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Resolve build metadata
+        shell: bash
+        run: |
+          case "${{ matrix.platform }}" in
+            windows-latest)
+              echo "PACKAGE_SUFFIX=windows-x86_64" >> "$GITHUB_ENV"
+              ;;
+            windows-11-arm)
+              echo "PACKAGE_SUFFIX=windows-arm64" >> "$GITHUB_ENV"
+              ;;
+            ubuntu-22.04)
+              echo "PACKAGE_SUFFIX=linux-x86_64" >> "$GITHUB_ENV"
+              ;;
+            ubuntu-22.04-arm)
+              echo "PACKAGE_SUFFIX=linux-arm64" >> "$GITHUB_ENV"
+              ;;
+            macos-26-intel)
+              echo "PACKAGE_SUFFIX=macos-x86_64" >> "$GITHUB_ENV"
+              ;;
+            macos-15)
+              echo "PACKAGE_SUFFIX=macos-arm64" >> "$GITHUB_ENV"
+              ;;
+            *)
+              echo "Unsupported platform: ${{ matrix.platform }}" >&2
+              exit 1
+              ;;
+          esac
+
+          case "${{ matrix.plugin }}" in
+            zevio)
+              echo "DIRECTORY=payment-plugins/zevio" >> "$GITHUB_ENV"
+              # Basename is the installed library stem (payment_zevio.dll / .so / .dylib).
+              echo "ARTIFACT_PATH=payment-plugins/zevio/build/ZevioPlugin/payment_zevio" >> "$GITHUB_ENV"
+              echo "CONFIGURE_ARGS=-DCMAKE_TOOLCHAIN_FILE=${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake" >> "$GITHUB_ENV"
+              if [ "${{ runner.os }}" = "Linux" ]; then
+                echo "INSTALL_PACKAGES=build-essential cmake git ninja-build pkg-config patchelf" >> "$GITHUB_ENV"
+              elif [ "${{ runner.os }}" = "macOS" ]; then
+                echo "INSTALL_PACKAGES=cmake ninja pkg-config" >> "$GITHUB_ENV"
+              else
+                echo "INSTALL_PACKAGES=cmake" >> "$GITHUB_ENV"
+              fi
+              ;;
+            *)
+              echo "Unknown payment plugin: ${{ matrix.plugin }}" >&2
+              exit 1
+              ;;
+          esac
+
+          echo "PLUGIN_NAME=${{ matrix.plugin }}" >> "$GITHUB_ENV"
+
+      - name: Install dependencies (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ env.INSTALL_PACKAGES }}
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install ${{ env.INSTALL_PACKAGES }}
+
+      - name: Configure CMake (${{ matrix.plugin }})
+        working-directory: ${{ env.DIRECTORY }}
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release ${{ env.CONFIGURE_ARGS }}
+
+      - name: Build (${{ matrix.plugin }})
+        working-directory: ${{ env.DIRECTORY }}
+        run: |
+          cmake --build build --config Release
+
+      # cmake --install --component plugin-runtime copies the plugin and the
+      # shared libraries it actually loads. FetchContent install rules and
+      # MSVC import libraries stay out of that component.
+      - name: Package (${{ matrix.plugin }})
+        shell: bash
+        run: |
+          set -euo pipefail
+          staging="${GITHUB_WORKSPACE}/package-staging"
+          flat="${GITHUB_WORKSPACE}/package-flat"
+          rm -rf "${staging}" "${flat}"
+          mkdir -p "${staging}" "${flat}" release-payloads
+          cmake --install "${DIRECTORY}/build" --config Release --prefix "${staging}" --component plugin-runtime
+
+          find "${staging}" \( -type f -o -type l \) \( \
+              -name '*.dll' -o -name '*.DLL' -o \
+              -name '*.dylib' -o \
+              -name '*.so' -o -name '*.so.*' \
+            \) -print0 |
+            while IFS= read -r -d '' shared; do
+              cp -a "${shared}" "${flat}/$(basename "${shared}")"
+            done
+
+          count="$(find "${flat}" -maxdepth 1 \( -type f -o -type l \) | wc -l)"
+          if [[ "${count}" -eq 0 ]]; then
+            echo "error: no shared libraries installed from ${DIRECTORY}/build" >&2
+            find "${staging}" -print >&2 || true
+            exit 1
+          fi
+
+          stem="$(basename "${ARTIFACT_PATH}")"
+          plugin_found=0
+          for candidate in \
+            "${flat}/${stem}.dll" \
+            "${flat}/${stem}.DLL" \
+            "${flat}/lib${stem}.so" \
+            "${flat}/${stem}.so" \
+            "${flat}/lib${stem}.dylib" \
+            "${flat}/${stem}.dylib"
+          do
+            if [[ -e "${candidate}" ]]; then
+              plugin_found=1
+            fi
+          done
+          if compgen -G "${flat}/lib${stem}.so.*" >/dev/null || compgen -G "${flat}/${stem}.so.*" >/dev/null; then
+            plugin_found=1
+          fi
+          if [[ "${plugin_found}" -ne 1 ]]; then
+            echo "error: plugin shared library ${stem} was not installed" >&2
+            find "${flat}" -maxdepth 1 -print >&2
+            exit 1
+          fi
+
+          echo "Packaged shared libraries:"
+          find "${flat}" -maxdepth 1 \( -type f -o -type l \) -exec basename {} \; | sort
+          tar -czf "release-payloads/${PLUGIN_NAME}-${PACKAGE_SUFFIX}.tar.gz" -C "${flat}" .
+
+      - name: Upload artifact (${{ matrix.plugin }})
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ env.PLUGIN_NAME }}-${{ env.PACKAGE_SUFFIX }}
+          path: release-payloads/${{ env.PLUGIN_NAME }}-${{ env.PACKAGE_SUFFIX }}.tar.gz
+          if-no-files-found: error
+          retention-days: 30

@@ -4,8 +4,8 @@ Native payment provider plugins for Graftcode Gateway. The Gateway core implemen
 
 | Plugin | Plugin id | Service | Platforms | Docs |
 |---|---|---|---|---|
-| [zevio](zevio/Readme.md) | `payment.zevio` | Zevio checkout links (BLIK, card) | Windows (WinHTTP) | [Readme](zevio/Readme.md) |
+| [zevio](zevio/Readme.md) | `payment.zevio` | Zevio checkout links (BLIK, card) | Windows, Linux, macOS | [Readme](zevio/Readme.md) |
 
 Each plugin keeps its own copy of `GraftcodePluginsInterfaces/PaymentProviderAbi.h`, as the communication plugins do with their interface headers. The source of truth is `src/GraftcodeGateway/Payments/PaymentProviderAbi.h` in graftcode-gateway; the copies must stay identical to it.
 
-Payment plugins are not part of the communication-plugins release workflow yet.
+[Payment Plugins Build](../.github/workflows/payment-plugins-build.yml) configures, builds, and uploads a `plugin-runtime` archive on `windows-latest`, `windows-11-arm`, `ubuntu-22.04`, `ubuntu-22.04-arm`, `macos-26-intel`, and `macos-15`.

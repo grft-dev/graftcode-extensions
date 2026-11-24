@@ -4,7 +4,7 @@ set(target_name payment_zevio)
 
 add_library(${target_name} SHARED
         "ZevioProvider.cpp"
-        "WinHttpClient.cpp"
+        "HttpClient.cpp"
 )
 
 target_include_directories(${target_name} PRIVATE
@@ -21,5 +21,16 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(json)
 
-target_link_libraries(${target_name} PRIVATE nlohmann_json::nlohmann_json winhttp)
+find_package(CURL REQUIRED)
+find_package(Threads REQUIRED)
+
+target_link_libraries(${target_name} PRIVATE nlohmann_json::nlohmann_json CURL::libcurl Threads::Threads)
+if(WIN32)
+	target_link_libraries(${target_name} PRIVATE winhttp urlmon ole32)
+endif()
+
+get_target_property(_curl_type CURL::libcurl TYPE)
+if(_curl_type STREQUAL "STATIC_LIBRARY")
+	target_compile_definitions(${target_name} PRIVATE CURL_STATICLIB)
+endif()
 set_target_properties(${target_name} PROPERTIES OUTPUT_NAME "payment_zevio" PREFIX "")
