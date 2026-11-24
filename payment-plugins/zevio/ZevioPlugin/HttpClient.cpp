@@ -3,10 +3,11 @@
 #include <curl/curl.h>
 
 #include <cctype>
+#include <chrono>
 #include <mutex>
-#include <optional>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #if defined(_WIN32)
 #ifndef NOMINMAX
@@ -14,6 +15,8 @@
 #endif
 #include <Windows.h>
 #include <winhttp.h>
+#include <urlmon.h>
+#include <objbase.h>
 #endif
 
 using namespace PaymentZevio;
@@ -135,11 +138,43 @@ namespace {
 				continue;
 			}
 			if (name == entry) return true;
-			if (name.size() > entry.size() && name[name.size() - entry.size() - 1] == '.'
-				&& name.compare(name.size() - entry.size(), entry.size(), entry) == 0)
-				return true;
 		}
 		return false;
+	}
+
+	/** WinHTTP's default autologon policy sends the current user only to an intranet proxy. */
+	bool proxyAllowsDefaultCredentials(const std::string& proxyUrl) {
+		const auto scheme = proxyUrl.find("://");
+		const std::size_t start = scheme == std::string::npos ? 0 : scheme + 3;
+		const auto at = proxyUrl.find('@', start);
+		const auto slash = proxyUrl.find('/', start);
+		if (at != std::string::npos && (slash == std::string::npos || at < slash))
+			return false;
+
+		const HRESULT init = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+		const bool ownCom = init == S_OK;
+		IInternetSecurityManager* manager = nullptr;
+		const HRESULT created = CoCreateInstance(CLSID_InternetSecurityManager, nullptr, CLSCTX_INPROC_SERVER,
+			IID_IInternetSecurityManager, reinterpret_cast<void**>(&manager));
+		DWORD zone = URLZONE_UNTRUSTED;
+		HRESULT mapped = E_FAIL;
+		if (SUCCEEDED(created) && manager)
+			mapped = manager->MapUrlToZone(widen(proxyUrl).c_str(), &zone, 0);
+		if (manager) manager->Release();
+		if (ownCom) CoUninitialize();
+		return SUCCEEDED(mapped) && (zone == URLZONE_INTRANET || zone == URLZONE_LOCAL_MACHINE);
+	}
+
+	bool curlSupportsSspi() {
+		const curl_version_info_data* info = curl_version_info(CURLVERSION_NOW);
+		return info != nullptr && (info->features & CURL_VERSION_SSPI) != 0;
+	}
+
+	void applyProxyAuthentication(CURL* easy, const std::string& proxyUrl) {
+		const bool useCurrentUser = !proxyUrl.empty() && curlSupportsSspi() && proxyAllowsDefaultCredentials(proxyUrl);
+		curl_easy_setopt(easy, CURLOPT_PROXYAUTH,
+			useCurrentUser ? static_cast<long>(CURLAUTH_NEGOTIATE | CURLAUTH_NTLM) : static_cast<long>(CURLAUTH_NONE));
+		curl_easy_setopt(easy, CURLOPT_PROXYUSERPWD, useCurrentUser ? ":" : "");
 	}
 
 	/** WinHTTP proxy token -> libcurl proxy URL. A bare host:port is an HTTP proxy. */
@@ -149,10 +184,11 @@ namespace {
 		return "http://" + value;
 	}
 
-	std::string pickProxy(const std::wstring& list, const std::string& targetScheme) {
-		const std::string text = narrow(list.c_str());
-		std::string generic;
-		std::string matched;
+	/** Scheme-specific entries win. Otherwise every unqualified proxy is kept, in order. */
+	std::vector<std::string> proxiesFor(const wchar_t* list, const std::string& targetScheme) {
+		const std::string text = narrow(list);
+		std::vector<std::string> specific;
+		std::vector<std::string> generic;
 		std::size_t i = 0;
 		while (i < text.size()) {
 			while (i < text.size() && (text[i] == ';' || text[i] == ' ' || text[i] == '\t')) ++i;
@@ -163,22 +199,22 @@ namespace {
 			if (token.empty()) continue;
 			const auto eq = token.find('=');
 			if (eq == std::string::npos) {
-				if (generic.empty()) generic = curlProxyUrl(token);
+				generic.push_back(curlProxyUrl(token));
 				continue;
 			}
-			if (lower(token.substr(0, eq)) == targetScheme && matched.empty())
-				matched = curlProxyUrl(token.substr(eq + 1));
+			const std::string value = token.substr(eq + 1);
+			if (value.empty() || lower(token.substr(0, eq)) != targetScheme) continue;
+			specific.push_back(curlProxyUrl(value));
 		}
-		return matched.empty() ? generic : matched;
+		return specific.empty() ? generic : specific;
 	}
 
-	bool readProxyInfo(const WINHTTP_PROXY_INFO& info, const std::string& url, std::string& proxy) {
+	std::vector<std::string> proxiesFromInfo(const WINHTTP_PROXY_INFO& info, const std::string& url) {
 		if (info.dwAccessType != WINHTTP_ACCESS_TYPE_NAMED_PROXY || !info.lpszProxy || !*info.lpszProxy)
-			return true;
+			return {};
 		if (info.lpszProxyBypass && bypasses(hostOf(url), info.lpszProxyBypass))
-			return true;
-		proxy = pickProxy(info.lpszProxy, schemeOf(url));
-		return true;
+			return {};
+		return proxiesFor(info.lpszProxy, schemeOf(url));
 	}
 
 	HINTERNET proxySession() {
@@ -192,12 +228,17 @@ namespace {
 		return session;
 	}
 
+	struct ProxyChoice {
+		bool known{ false };
+		std::vector<std::string> proxies;
+	};
+
 	/**
-	 * nullopt: Windows did not answer; libcurl may use proxy environment variables.
-	 * empty: direct connection.
-	 * otherwise: a libcurl proxy URL.
+	 * known false: Windows did not answer; libcurl may use proxy environment variables.
+	 * known true and empty: direct connection.
+	 * otherwise: ordered proxy candidates. A later proxy is used only when connecting to an earlier one fails.
 	 */
-	std::optional<std::string> windowsProxyFor(const std::string& url) {
+	ProxyChoice windowsProxyFor(const std::string& url) {
 		WINHTTP_CURRENT_USER_IE_PROXY_CONFIG ie{};
 		const bool haveIe = WinHttpGetIEProxyConfigForCurrentUser(&ie) == TRUE;
 		WinHttpStrings ieFree;
@@ -222,41 +263,68 @@ namespace {
 				const bool resolved = options.dwFlags != 0
 					&& WinHttpGetProxyForUrl(session, widen(url).c_str(), &options, &info) == TRUE;
 				if (resolved) {
-					std::string proxy;
-					readProxyInfo(info, url, proxy);
+					ProxyChoice choice;
+					choice.known = true;
+					choice.proxies = proxiesFromInfo(info, url);
 					if (info.lpszProxy) GlobalFree(info.lpszProxy);
 					if (info.lpszProxyBypass) GlobalFree(info.lpszProxyBypass);
-					return proxy;
+					return choice;
 				}
 			}
 		}
 
 		if (haveIe && ie.lpszProxy && *ie.lpszProxy) {
-			if (ie.lpszProxyBypass && bypasses(hostOf(url), ie.lpszProxyBypass))
-				return std::string{};
-			return pickProxy(ie.lpszProxy, schemeOf(url));
+			ProxyChoice choice;
+			choice.known = true;
+			if (!(ie.lpszProxyBypass && bypasses(hostOf(url), ie.lpszProxyBypass)))
+				choice.proxies = proxiesFor(ie.lpszProxy, schemeOf(url));
+			return choice;
 		}
-		if (haveIe)
-			return std::string{};
+		if (haveIe) {
+			ProxyChoice choice;
+			choice.known = true;
+			return choice;
+		}
 
 		WINHTTP_PROXY_INFO def{};
 		if (!WinHttpGetDefaultProxyConfiguration(&def))
-			return std::nullopt;
-		std::string proxy;
-		readProxyInfo(def, url, proxy);
+			return {};
+		ProxyChoice choice;
+		choice.known = true;
+		choice.proxies = proxiesFromInfo(def, url);
 		if (def.lpszProxy) GlobalFree(def.lpszProxy);
 		if (def.lpszProxyBypass) GlobalFree(def.lpszProxyBypass);
-		return proxy;
-	}
-
-	void applyWindowsProxy(CURL* easy, const std::string& url, std::string& storage) {
-		const std::optional<std::string> proxy = windowsProxyFor(url);
-		if (!proxy) return;
-		storage = *proxy;
-		curl_easy_setopt(easy, CURLOPT_PROXY, storage.c_str());
-		curl_easy_setopt(easy, CURLOPT_NOPROXY, "");
+		return choice;
 	}
 #endif
+
+	struct ProxyAttempt {
+		bool overrideProxy{ false };
+		std::string proxy;
+	};
+
+	int noteRequestSent(CURL*, curl_infotype type, char*, std::size_t, void* userdata) {
+		if (type == CURLINFO_HEADER_OUT || type == CURLINFO_DATA_OUT)
+			*static_cast<bool*>(userdata) = true;
+		return 0;
+	}
+
+	/** Connection failures may try the next proxy. A POST that already left the process is not sent again. */
+	bool mayTryNextProxy(const std::string& method, CURLcode code, bool requestSent) {
+		const bool post = method != "GET" && method != "HEAD";
+		if (post && requestSent) return false;
+		switch (code) {
+		case CURLE_COULDNT_RESOLVE_PROXY:
+		case CURLE_COULDNT_CONNECT:
+			return true;
+		case CURLE_COULDNT_RESOLVE_HOST:
+		case CURLE_OPERATION_TIMEDOUT:
+		case CURLE_SSL_CONNECT_ERROR:
+			return !requestSent;
+		default:
+			return false;
+		}
+	}
 }
 
 HttpClient::HttpClient(const std::string& baseUrl, std::string bearerToken, int timeoutMs)
@@ -284,8 +352,6 @@ HttpResponse HttpClient::send(const std::string& method, const std::string& path
 	curl_easy_setopt(easy.handle, CURLOPT_USERAGENT, "graftcode-payment-zevio/0.1");
 	curl_easy_setopt(easy.handle, CURLOPT_NOSIGNAL, 1L);
 	curl_easy_setopt(easy.handle, CURLOPT_FOLLOWLOCATION, 0L);
-	curl_easy_setopt(easy.handle, CURLOPT_TIMEOUT_MS, static_cast<long>(timeoutMs_));
-	curl_easy_setopt(easy.handle, CURLOPT_CONNECTTIMEOUT_MS, static_cast<long>(timeoutMs_));
 	curl_easy_setopt(easy.handle, CURLOPT_SSL_VERIFYPEER, 1L);
 	curl_easy_setopt(easy.handle, CURLOPT_SSL_VERIFYHOST, 2L);
 	curl_easy_setopt(easy.handle, CURLOPT_WRITEFUNCTION, writeBody);
@@ -296,9 +362,27 @@ HttpResponse HttpClient::send(const std::string& method, const std::string& path
 		curl_easy_setopt(easy.handle, CURLOPT_POSTFIELDSIZE_LARGE, static_cast<curl_off_t>(body.size()));
 	}
 
+	std::vector<ProxyAttempt> attempts;
 #if defined(_WIN32)
-	std::string proxy;
-	applyWindowsProxy(easy.handle, url, proxy);
+	const ProxyChoice choice = windowsProxyFor(url);
+	if (!choice.known) {
+		attempts.push_back({});
+	}
+	else if (choice.proxies.empty()) {
+		ProxyAttempt direct;
+		direct.overrideProxy = true;
+		attempts.push_back(std::move(direct));
+	}
+	else {
+		for (const std::string& proxy : choice.proxies) {
+			ProxyAttempt attempt;
+			attempt.overrideProxy = true;
+			attempt.proxy = proxy;
+			attempts.push_back(std::move(attempt));
+		}
+	}
+#else
+	attempts.push_back({});
 #endif
 
 	std::string authorization = "Authorization: Bearer " + bearerToken_;
@@ -309,7 +393,38 @@ HttpResponse HttpClient::send(const std::string& method, const std::string& path
 		headers.list = curl_slist_append(headers.list, "Content-Type: application/json; charset=utf-8");
 	curl_easy_setopt(easy.handle, CURLOPT_HTTPHEADER, headers.list);
 
-	const CURLcode code = curl_easy_perform(easy.handle);
+	bool requestSent = false;
+	if (attempts.size() > 1) {
+		curl_easy_setopt(easy.handle, CURLOPT_DEBUGFUNCTION, noteRequestSent);
+		curl_easy_setopt(easy.handle, CURLOPT_DEBUGDATA, &requestSent);
+		curl_easy_setopt(easy.handle, CURLOPT_VERBOSE, 1L);
+	}
+
+	const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs_);
+	CURLcode code = CURLE_OPERATION_TIMEDOUT;
+	for (std::size_t i = 0; i < attempts.size(); ++i) {
+		const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(
+			deadline - std::chrono::steady_clock::now()).count();
+		if (left <= 0) break;
+		response.body.clear();
+		requestSent = false;
+		errorBuffer[0] = '\0';
+		curl_easy_setopt(easy.handle, CURLOPT_TIMEOUT_MS, static_cast<long>(left));
+		curl_easy_setopt(easy.handle, CURLOPT_CONNECTTIMEOUT_MS, static_cast<long>(left));
+		if (i > 0)
+			curl_easy_setopt(easy.handle, CURLOPT_FRESH_CONNECT, 1L);
+		if (attempts[i].overrideProxy) {
+			curl_easy_setopt(easy.handle, CURLOPT_PROXY, attempts[i].proxy.c_str());
+			curl_easy_setopt(easy.handle, CURLOPT_NOPROXY, "");
+#if defined(_WIN32)
+			applyProxyAuthentication(easy.handle, attempts[i].proxy);
+#endif
+		}
+		code = curl_easy_perform(easy.handle);
+		if (code == CURLE_OK) break;
+		if (i + 1 >= attempts.size() || !mayTryNextProxy(method, code, requestSent))
+			break;
+	}
 	if (code != CURLE_OK) {
 		const char* detail = errorBuffer[0] != '\0' ? errorBuffer : curl_easy_strerror(code);
 		throw std::runtime_error(std::string("Zevio ") + method + " failed: " + detail);

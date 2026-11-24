@@ -11,7 +11,9 @@ namespace PaymentZevio {
 	/**
 	 * HTTPS client on libcurl (vcpkg, linked into the plugin).
 	 * Each send() owns its curl handle, so concurrent calls do not queue on one lock.
-	 * On Windows, each transfer uses the system proxy (WinHTTP automatic proxy, including PAC).
+	 * On Windows, each transfer uses the system proxy list (WinHTTP automatic proxy, including PAC).
+	 * An intranet proxy may authenticate with the current user's Negotiate or NTLM credentials. An internet proxy does not.
+	 * The next proxy is tried only when connecting to an earlier one fails, and a payment POST is not sent again once any of it may have left the process.
 	 */
 	class HttpClient {
 	public:

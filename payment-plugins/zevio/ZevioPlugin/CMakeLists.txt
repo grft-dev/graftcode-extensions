@@ -26,7 +26,7 @@ find_package(Threads REQUIRED)
 
 target_link_libraries(${target_name} PRIVATE nlohmann_json::nlohmann_json CURL::libcurl Threads::Threads)
 if(WIN32)
-	target_link_libraries(${target_name} PRIVATE winhttp)
+	target_link_libraries(${target_name} PRIVATE winhttp urlmon ole32)
 endif()
 
 get_target_property(_curl_type CURL::libcurl TYPE)
