@@ -303,8 +303,10 @@ namespace {
 		std::string proxy;
 	};
 
-	int noteRequestSent(CURL*, curl_infotype type, char*, std::size_t, void* userdata) {
-		if (type == CURLINFO_HEADER_OUT || type == CURLINFO_DATA_OUT)
+	int noteRequestSent(CURL*, curl_infotype type, char* data, std::size_t size, void* userdata) {
+		const bool tunnelRequest = type == CURLINFO_HEADER_OUT && size >= 8
+			&& std::char_traits<char>::compare(data, "CONNECT ", 8) == 0;
+		if (!tunnelRequest && (type == CURLINFO_HEADER_OUT || type == CURLINFO_DATA_OUT))
 			*static_cast<bool*>(userdata) = true;
 		return 0;
 	}
