@@ -152,7 +152,7 @@ namespace {
 			return false;
 
 		const HRESULT init = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-		const bool ownCom = init == S_OK;
+		const bool ownCom = SUCCEEDED(init);
 		IInternetSecurityManager* manager = nullptr;
 		const HRESULT created = CoCreateInstance(CLSID_InternetSecurityManager, nullptr, CLSCTX_INPROC_SERVER,
 			IID_IInternetSecurityManager, reinterpret_cast<void**>(&manager));
