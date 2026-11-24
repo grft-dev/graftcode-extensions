@@ -25,6 +25,9 @@ find_package(CURL REQUIRED)
 find_package(Threads REQUIRED)
 
 target_link_libraries(${target_name} PRIVATE nlohmann_json::nlohmann_json CURL::libcurl Threads::Threads)
+if(WIN32)
+	target_link_libraries(${target_name} PRIVATE winhttp)
+endif()
 
 get_target_property(_curl_type CURL::libcurl TYPE)
 if(_curl_type STREQUAL "STATIC_LIBRARY")

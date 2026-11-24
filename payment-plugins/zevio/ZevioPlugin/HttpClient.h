@@ -1,6 +1,5 @@
 #pragma once
 
-#include <mutex>
 #include <string>
 
 namespace PaymentZevio {
@@ -9,12 +8,15 @@ namespace PaymentZevio {
 		std::string body;
 	};
 
-	/** HTTPS client on libcurl (vcpkg, linked into the plugin). Thread-safe. */
+	/**
+	 * HTTPS client on libcurl (vcpkg, linked into the plugin).
+	 * Each send() owns its curl handle, so concurrent calls do not queue on one lock.
+	 * On Windows, each transfer uses the system proxy (WinHTTP automatic proxy, including PAC).
+	 */
 	class HttpClient {
 	public:
 		/** baseUrl e.g. https://api.sandbox.zevio.io/api/v1 */
 		HttpClient(const std::string& baseUrl, std::string bearerToken, int timeoutMs);
-		~HttpClient();
 		HttpClient(const HttpClient&) = delete;
 		HttpClient& operator=(const HttpClient&) = delete;
 
@@ -25,7 +27,5 @@ namespace PaymentZevio {
 		std::string baseUrl_;
 		std::string bearerToken_;
 		int timeoutMs_{ 30000 };
-		void* curl_{ nullptr };
-		mutable std::mutex mutex_;
 	};
 }
