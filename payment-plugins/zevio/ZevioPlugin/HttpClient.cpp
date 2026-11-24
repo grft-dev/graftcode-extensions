@@ -254,6 +254,7 @@ namespace {
 		if (!proxy) return;
 		storage = *proxy;
 		curl_easy_setopt(easy, CURLOPT_PROXY, storage.c_str());
+		curl_easy_setopt(easy, CURLOPT_NOPROXY, "");
 	}
 #endif
 }
