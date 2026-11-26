@@ -1,8 +1,11 @@
 // payment.zevio – native payment provider plugin for Graftcode Gateway (C ABI: PaymentProviderAbi.h).
 //
 // Knows only Zevio (https://api.<env>.zevio.io/api/v1, Bearer API key):
-//  - createSession: offer-based checkout link. Service reference -> offer qrId (config "offers"),
-//    GET /qr/{qrId} must be ACTIVE with exactly the quoted price, then POST /payments/{qrId}
+//  - quote (GG pricing mode "offer", the default): offer key (config "offers") or direct qrId -> GET /qr/{qrId},
+//    must be ACTIVE; returns its gross price (totalAmount), currency and title. The price lives only in Zevio.
+//  - createSession: offer-based checkout link. Reference -> offer qrId (config "offers" or a direct qr_ id).
+//    Reuses the offer body cached by quote (no second GET /qr) when still fresh; otherwise GET /qr/{qrId}.
+//    The offer must be ACTIVE with exactly the quoted price (the check still runs in sdk mode), then POST /payments/{qrId}
 //    with metadata.challenge_id = sessionRef. Returns paymentUrl (destinationLink) and shortUrl (link).
 //  - verify: GET /payments (newest first, filtered by offer and creation time) and find the payment whose
 //    metadata.challenge_id == sessionRef. SUCCESS = paid; PENDING/FAILED (or none yet) = pending; others = failed.
@@ -18,10 +21,13 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <chrono>
 #include <ctime>
 #include <memory>
+#include <mutex>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 
 #if defined(_WIN32)
 #define PAYMENT_PLUGIN_EXPORT extern "C" __declspec(dllexport)
@@ -116,9 +122,10 @@ namespace {
 			errors.push_back("environment 'production' requires an explicit apiUrl");
 		if (!config.contains("apiKey") || !config["apiKey"].is_string() || config["apiKey"].get<std::string>().empty())
 			errors.push_back("apiKey is required (use {\"secretRef\":\"env:ZEVIO_API_KEY\"} in the GG payment config)");
-		if (!config.contains("offers") || !config["offers"].is_object() || config["offers"].empty())
-			errors.push_back("offers must map service references to Zevio offer ids, e.g. {\"haircut\":\"qr_...\"}");
-		else
+		// "offers" is optional: tools may name a Zevio offer id (qr_...) directly.
+		if (config.contains("offers") && !config["offers"].is_object())
+			errors.push_back("offers must map offer keys to Zevio offer ids, e.g. {\"haircut\":\"qr_...\"}");
+		else if (config.contains("offers"))
 			for (auto& [k, v] : config["offers"].items())
 				if (!v.is_string() || v.get<std::string>().rfind("qr_", 0) != 0)
 					errors.push_back("offers." + k + " must be a Zevio offer id (qr_...)");
@@ -145,28 +152,83 @@ struct PaymentProviderInstance {
 	std::string language;
 	std::string environment;
 
+	mutable std::mutex offerCacheMutex;
+	mutable std::unordered_map<std::string, std::pair<json, std::chrono::steady_clock::time_point>> offerCache;
+	static constexpr auto kOfferCacheTtl = std::chrono::seconds(5);
+
 	json getJson(const std::string& path) const {
 		const HttpResponse r = http->send("GET", path, "");
 		if (r.status < 200 || r.status >= 300) throw std::runtime_error("Zevio GET /" + path.substr(0, path.find('?')) + " -> " + describe(r));
 		return json::parse(r.body);
 	}
 
-	json createSession(const json& req) const {
-		const std::string reference = req.value("reference", "");
-		if (!offers.contains(reference))
-			return errorResult("offer_not_configured", "No Zevio offer configured for reference '" + reference + "'");
-		const std::string qrId = offers[reference].get<std::string>();
+	/** GET /qr/{qrId}, or the body cached for a few seconds by a just-run quote (same request: no second read). */
+	json readOffer(const std::string& qrId, bool allowCache) const {
+		if (allowCache) {
+			std::lock_guard<std::mutex> lock(offerCacheMutex);
+			const auto it = offerCache.find(qrId);
+			if (it != offerCache.end() && std::chrono::steady_clock::now() - it->second.second < kOfferCacheTtl)
+				return it->second.first;
+		}
+		json offer = getJson("qr/" + urlEncode(qrId));
+		std::lock_guard<std::mutex> lock(offerCacheMutex);
+		offerCache[qrId] = { offer, std::chrono::steady_clock::now() };
+		return offer;
+	}
 
-		// The offer sets the price (POST /payments/{qrId} has no amount): it must equal the merchant quote.
-		const json offer = getJson("qr/" + urlEncode(qrId));
+	/** Offer key from config "offers", or a direct Zevio offer id (qr_...). Empty when unknown. */
+	std::string resolveOffer(const std::string& key) const {
+		if (offers.is_object() && offers.contains(key)) return offers[key].get<std::string>();
+		if (key.rfind("qr_", 0) == 0) return key;
+		return "";
+	}
+
+	/** Gross price of the offer (totalAmount includes VAT; amount is net). */
+	static long long offerPriceMinor(const json& offer) {
+		return toMinor(offer.contains("totalAmount") ? offer["totalAmount"] : offer["amount"]);
+	}
+
+	json quote(const json& req) const {
+		const std::string key = req.value("offer", "");
+		const std::string qrId = resolveOffer(key);
+		if (qrId.empty())
+			return errorResult("offer_not_configured", "No Zevio offer configured for '" + key + "' (add it to \"offers\" or use a qr_ id)");
+		const json offer = readOffer(qrId, false);
 		if (lower(offer.value("status", "")) != "active")
 			return errorResult("offer_inactive", "Zevio offer " + qrId + " is not active");
-		const long long offerMinor = toMinor(offer.contains("totalAmount") ? offer["totalAmount"] : offer["amount"]);
-		const std::string offerCurrency = upper(offer.value("currency", ""));
-		const long long quoteMinor = toMinor(req["amount"]);
-		if (offerMinor != quoteMinor || offerCurrency != upper(req.value("currency", "")))
-			return errorResult("price_mismatch", "Zevio offer " + qrId + " costs " + formatMinor(offerMinor) + " " + offerCurrency
-				+ ", the merchant quoted " + formatMinor(quoteMinor) + " " + upper(req.value("currency", "")));
+		const long long priceMinor = offerPriceMinor(offer);
+		const std::string currency = upper(offer.value("currency", ""));
+		if (priceMinor <= 0 || currency.size() != 3)
+			return errorResult("offer_invalid", "Zevio offer " + qrId + " has no valid price");
+		return json{
+			{"ok", true},
+			{"amount", formatMinor(priceMinor)},
+			{"currency", currency},
+			{"description", offer.value("title", "")},
+			{"reference", key},
+			{"offerId", qrId}
+		};
+	}
+
+	json createSession(const json& req) const {
+		const std::string reference = req.value("reference", "");
+		const std::string qrId = resolveOffer(reference);
+		if (qrId.empty())
+			return errorResult("offer_not_configured", "No Zevio offer configured for reference '" + reference + "'");
+
+		// "offer" mode: GG already took the price from Quote / its catalog — do not GET /qr again (avoids a second
+		// read and a later 402 failing if the provider is briefly unavailable). "sdk" mode still fetches and checks.
+		if (lower(req.value("pricingMode", "")) != "offer") {
+			const json offer = readOffer(qrId, true);
+			if (lower(offer.value("status", "")) != "active")
+				return errorResult("offer_inactive", "Zevio offer " + qrId + " is not active");
+			const long long offerMinor = offerPriceMinor(offer);
+			const std::string offerCurrency = upper(offer.value("currency", ""));
+			const long long quoteMinor = toMinor(req["amount"]);
+			if (offerMinor != quoteMinor || offerCurrency != upper(req.value("currency", "")))
+				return errorResult("price_mismatch", "Zevio offer " + qrId + " costs " + formatMinor(offerMinor) + " " + offerCurrency
+					+ ", the merchant quoted " + formatMinor(quoteMinor) + " " + upper(req.value("currency", "")));
+		}
 
 		json metadata = req.value("metadata", json::object());
 		metadata["challenge_id"] = req.value("sessionRef", "");
@@ -196,8 +258,8 @@ struct PaymentProviderInstance {
 	json verify(const json& req) const {
 		const std::string sessionRef = req.value("sessionRef", "");
 		std::string url = "payments?limit=100&sortBy=createdAt&sortOrder=desc";
-		const std::string reference = req.value("reference", "");
-		if (offers.contains(reference)) url += "&qrId=" + urlEncode(offers[reference].get<std::string>());
+		const std::string qrId = resolveOffer(req.value("reference", ""));
+		if (!qrId.empty()) url += "&qrId=" + urlEncode(qrId);
 		const std::string from = isoMinus(req.value("issuedAt", ""), 600);
 		if (!from.empty()) url += "&from=" + urlEncode(from);
 
@@ -255,7 +317,7 @@ PAYMENT_PLUGIN_EXPORT char* PaymentProviderCapabilities(void) {
 		{"provider", "zevio"},
 		{"scheme", "zevio-checkout"},
 		{"interactions", json::array({ "checkout_link" })},
-		{"pricing", json::array({ "offer" })},
+		{"pricing", json::array({ "offer", "sdk" })},
 		{"currencies", json::array({ "PLN" })},
 		{"verification", "poll"},
 		{"webhooks", false},
@@ -267,7 +329,7 @@ PAYMENT_PLUGIN_EXPORT char* PaymentProviderConfigSchema(void) {
 	return dupJson(json{
 		{"$schema", "https://json-schema.org/draft/2020-12/schema"},
 		{"type", "object"},
-		{"required", json::array({ "apiKey", "offers" })},
+		{"required", json::array({ "apiKey" })},
 		{"properties", {
 			{"environment", { {"enum", json::array({ "sandbox", "production" })}, {"default", "sandbox"} }},
 			{"apiUrl", { {"type", "string"}, {"description", "Override of the Zevio API base URL (required for production)"} }},
@@ -276,7 +338,7 @@ PAYMENT_PLUGIN_EXPORT char* PaymentProviderConfigSchema(void) {
 			{"language", { {"enum", json::array({ "PL", "EN" })}, {"default", "PL"} }},
 			{"timeoutMs", { {"type", "integer"}, {"default", 30000} }},
 			{"offers", { {"type", "object"}, {"additionalProperties", { {"type", "string"}, {"pattern", "^qr_"} }},
-				{"description", "Merchant quote reference -> Zevio offer qrId"} }}
+				{"description", "Offer key (tool pricing.offer or sdk quote reference) -> Zevio offer qrId"} }}
 		}}
 	});
 }
@@ -297,7 +359,7 @@ PAYMENT_PLUGIN_EXPORT PaymentProviderInstance* CreatePaymentProvider(const char*
 		instance->environment = config.value("environment", "sandbox");
 		const std::string baseUrl = config.value("apiUrl", "").empty() ? std::string(kSandboxUrl) : config.value("apiUrl", "");
 		instance->http = std::make_unique<HttpClient>(baseUrl, config["apiKey"].get<std::string>(), config.value("timeoutMs", 30000));
-		instance->offers = config["offers"];
+		instance->offers = config.value("offers", json::object());
 		instance->customerEmail = config.value("customerEmail", "poc-agent@example.com");
 		instance->language = config.value("language", "PL");
 		return instance.release();
@@ -310,6 +372,16 @@ PAYMENT_PLUGIN_EXPORT PaymentProviderInstance* CreatePaymentProvider(const char*
 
 PAYMENT_PLUGIN_EXPORT void DestroyPaymentProvider(PaymentProviderInstance* instance) {
 	delete instance;
+}
+
+PAYMENT_PLUGIN_EXPORT char* PaymentProviderQuote(PaymentProviderInstance* instance, const char* requestJson) {
+	try {
+		if (!instance) return dupJson(errorResult("not_initialized", "provider instance is null"));
+		return dupJson(instance->quote(json::parse(requestJson ? requestJson : "")));
+	}
+	catch (const std::exception& e) {
+		return dupJson(errorResult("zevio_error", e.what()));
+	}
 }
 
 PAYMENT_PLUGIN_EXPORT char* PaymentProviderCreateSession(PaymentProviderInstance* instance, const char* requestJson) {
