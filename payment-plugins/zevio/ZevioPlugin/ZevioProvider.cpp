@@ -201,9 +201,12 @@ struct PaymentProviderInstance {
 		if (qrId.empty())
 			return errorResult("offer_not_configured", "No Zevio offer configured for reference '" + reference + "'");
 
-		// "offer" mode: GG already took the price from Quote / its catalog — do not GET /qr again (avoids a second
-		// read and a later 402 failing if the provider is briefly unavailable). "sdk" mode always fetches a fresh offer and checks.
-		if (lower(req.value("pricingMode", "")) != "offer") {
+		// "offer" (the default, including when pricingMode is missing or empty): GG already took the price from
+		// Quote / its catalog — do not GET /qr again (avoids a second read and a later 402 failing if the provider
+		// is briefly unavailable). "sdk" mode always fetches a fresh offer and checks.
+		std::string pricingMode = lower(req.value("pricingMode", "offer"));
+		if (pricingMode.empty()) pricingMode = "offer";
+		if (pricingMode != "offer") {
 			const json offer = readOffer(qrId);
 			if (lower(offer.value("status", "")) != "active")
 				return errorResult("offer_inactive", "Zevio offer " + qrId + " is not active");

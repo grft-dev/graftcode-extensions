@@ -34,8 +34,9 @@
  *
  * createSession request (amount/currency come from quote in "offer" mode or from the merchant module in "sdk" mode):
  *   {"sessionRef":"<challengeId>","quoteId":"q_..","merchantId":"..","tool":"..","amount":"50.00",
- *    "currency":"PLN","description":"..","reference":"haircut","expiresAt":"2026-11-23T13:00:00Z",
- *    "metadata":{"k":"v"}}
+ *    "currency":"PLN","description":"..","reference":"haircut","pricingMode":"offer",
+ *    "expiresAt":"2026-11-23T13:00:00Z","metadata":{"k":"v"}}
+ *   "pricingMode" is "offer" or "sdk". If it is omitted or empty, the plugin treats it as "offer".
  * createSession response:
  *   {"ok":true,"scheme":"zevio-checkout","paymentUrl":"https://..","shortUrl":"https://..","sessionId":".."}
  *   {"ok":false,"error":{"code":"price_mismatch","message":".."}}
