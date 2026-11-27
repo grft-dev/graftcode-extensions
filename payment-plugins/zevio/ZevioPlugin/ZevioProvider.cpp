@@ -4,9 +4,10 @@
 //  - quote (GG pricing mode "offer", the default): offer key (config "offers") or direct qrId -> GET /qr/{qrId},
 //    must be ACTIVE; returns its gross price (totalAmount), currency and title. The price lives only in Zevio.
 //  - createSession: offer-based checkout link. Reference -> offer qrId (config "offers" or a direct qr_ id).
-//    Reuses the offer body cached by quote (no second GET /qr) when still fresh; otherwise GET /qr/{qrId}.
-//    The offer must be ACTIVE with exactly the quoted price (the check still runs in sdk mode), then POST /payments/{qrId}
-//    with metadata.challenge_id = sessionRef. Returns paymentUrl (destinationLink) and shortUrl (link).
+//    In offer mode, does not GET /qr again (GG already took the price from Quote / the signed challenge)
+//    and goes straight to POST /payments/{qrId}. In sdk mode, always GET /qr/{qrId} (fresh), requires the offer
+//    to be ACTIVE with exactly the quoted price, then posts. POST body sets metadata.challenge_id = sessionRef.
+//    Returns paymentUrl (destinationLink) and shortUrl (link).
 //  - verify: GET /payments (newest first, filtered by offer and creation time) and find the payment whose
 //    metadata.challenge_id == sessionRef. SUCCESS = paid; PENDING/FAILED (or none yet) = pending; others = failed.
 // Knows nothing about x402/MCP – that is Graftcode Gateway core. Never logs or returns the API key.
@@ -21,13 +22,10 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
-#include <chrono>
 #include <ctime>
 #include <memory>
-#include <mutex>
 #include <stdexcept>
 #include <string>
-#include <unordered_map>
 
 #if defined(_WIN32)
 #define PAYMENT_PLUGIN_EXPORT extern "C" __declspec(dllexport)
@@ -152,28 +150,15 @@ struct PaymentProviderInstance {
 	std::string language;
 	std::string environment;
 
-	mutable std::mutex offerCacheMutex;
-	mutable std::unordered_map<std::string, std::pair<json, std::chrono::steady_clock::time_point>> offerCache;
-	static constexpr auto kOfferCacheTtl = std::chrono::seconds(5);
-
 	json getJson(const std::string& path) const {
 		const HttpResponse r = http->send("GET", path, "");
 		if (r.status < 200 || r.status >= 300) throw std::runtime_error("Zevio GET /" + path.substr(0, path.find('?')) + " -> " + describe(r));
 		return json::parse(r.body);
 	}
 
-	/** GET /qr/{qrId}, or the body cached for a few seconds by a just-run quote (same request: no second read). */
-	json readOffer(const std::string& qrId, bool allowCache) const {
-		if (allowCache) {
-			std::lock_guard<std::mutex> lock(offerCacheMutex);
-			const auto it = offerCache.find(qrId);
-			if (it != offerCache.end() && std::chrono::steady_clock::now() - it->second.second < kOfferCacheTtl)
-				return it->second.first;
-		}
-		json offer = getJson("qr/" + urlEncode(qrId));
-		std::lock_guard<std::mutex> lock(offerCacheMutex);
-		offerCache[qrId] = { offer, std::chrono::steady_clock::now() };
-		return offer;
+	/** Always a fresh GET /qr/{qrId}. */
+	json readOffer(const std::string& qrId) const {
+		return getJson("qr/" + urlEncode(qrId));
 	}
 
 	/** Offer key from config "offers", or a direct Zevio offer id (qr_...). Empty when unknown. */
@@ -193,7 +178,7 @@ struct PaymentProviderInstance {
 		const std::string qrId = resolveOffer(key);
 		if (qrId.empty())
 			return errorResult("offer_not_configured", "No Zevio offer configured for '" + key + "' (add it to \"offers\" or use a qr_ id)");
-		const json offer = readOffer(qrId, false);
+		const json offer = readOffer(qrId);
 		if (lower(offer.value("status", "")) != "active")
 			return errorResult("offer_inactive", "Zevio offer " + qrId + " is not active");
 		const long long priceMinor = offerPriceMinor(offer);
@@ -217,9 +202,9 @@ struct PaymentProviderInstance {
 			return errorResult("offer_not_configured", "No Zevio offer configured for reference '" + reference + "'");
 
 		// "offer" mode: GG already took the price from Quote / its catalog — do not GET /qr again (avoids a second
-		// read and a later 402 failing if the provider is briefly unavailable). "sdk" mode still fetches and checks.
+		// read and a later 402 failing if the provider is briefly unavailable). "sdk" mode always fetches a fresh offer and checks.
 		if (lower(req.value("pricingMode", "")) != "offer") {
-			const json offer = readOffer(qrId, true);
+			const json offer = readOffer(qrId);
 			if (lower(offer.value("status", "")) != "active")
 				return errorResult("offer_inactive", "Zevio offer " + qrId + " is not active");
 			const long long offerMinor = offerPriceMinor(offer);
